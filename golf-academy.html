@@ -1557,18 +1557,19 @@ function downloadMonthlyPDF(){
   setTimeout(()=>window.print(),50);
 }
 
-function buildThingsToCarryMsg(b) {
+function buildThingsToCarryMsg(b, pdfLink) {
   const hasAirport=(b.inclusions||[]).includes('Airport Pick-up');
-  const progType=(b.programmeType||'').toLowerCase();
-  const isAnnual=progType.includes('annual');
-  const isSingleSession=progType.includes('single session');
-  const pdfLink=isSingleSession?'':isAnnual?settings.pdfAnnual:settings.pdfVisiting;
   const trainingStart = b.trainingStartDate ? fmtDate(b.trainingStartDate) : fmtDate(b.arrivalDate);
+  // If pdfLink not passed, read from dropdown if open
+  if (pdfLink === undefined) {
+    const sel = document.getElementById('tc-pdf-select');
+    pdfLink = sel ? sel.value : '';
+  }
   return `📦 *Things to Carry — TSG Golf Academy*
 ━━━━━━━━━━━━━━━━━━━━
 Dear ${b.parentName},
 
-${b.studentName}'s *${b.programmeType}* programme begins on *${trainingStart}*. Please find the complete packing list in the PDF attached${pdfLink?' / linked below':''}.
+${b.studentName}'s *${b.programmeType}* programme begins on *${trainingStart}*. Please find the complete packing list${pdfLink?' at the link below':' attached'}.
 ${pdfLink?'\n📎 Packing List: '+pdfLink:''}
 ${hasAirport?'\n✈️ *Airport Pick-up:* Arranged — our team will meet you at arrivals. No need to book a cab.':''}
 ${b.specialNotes?'\n⚠️ *Special Note:* '+b.specialNotes:''}
@@ -1595,9 +1596,9 @@ function viewBooking(id) {
   const isSingleSession=(b.programmeType||'').toLowerCase().includes('single session');
   const {base,misc,netFee,preGst,gst,discount,total,gstOn,discOn}=calcInvoice(b);
   // Store tcMsg globally so onclick handlers can access it safely without string-escaping issues
-  window._tcMsg = buildThingsToCarryMsg(b);
+  window._tcBookingId = b.id;
+  window._tcMsg = buildThingsToCarryMsg(b, '');
   window._tcPhone = b.phone||'';
-  window._tcPdfMissing = tcPdfMissing(b);
 
   let invoiceLines=`<div class="invoice-line"><span>Programme Fee</span><span>₹${base.toLocaleString('en-IN')}</span></div>`;
   if(discOn&&discount>0){
@@ -1648,10 +1649,16 @@ function viewBooking(id) {
       <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('hospitality','${encodeURIComponent(hospitalityMsg)}','Hospitality — ${b.studentName}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>`:'<span></span><span></span><span></span>'}
 
       ${!isSingleSession?`
-      <span style="font-size:13px">📦 Parent (Things to Carry)${window._tcPdfMissing?'<span title="No PDF link configured — go to Settings" style="margin-left:5px;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700">⚠️ No PDF</span>':''}</span>
-      <button class="btn btn-sm btn-wa" onclick="sendTCWhatsApp()">💬 WA</button>
-      <button class="btn btn-sm btn-secondary" onclick="sendTCEmail('${b.studentName}','${b.id}')">📧 Email</button>
-      ${window._tcPdfMissing?`<span></span><div id="tc-pdf-warning" style="display:none;grid-column:1/-1;align-items:center;gap:8px;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400e;margin-top:4px"><span>⚠️</span><span><strong>No PDF link configured</strong> for this programme type. Please <strong>manually attach the PDF</strong> to your WhatsApp message. Add the link in <strong>Settings → Things to Carry</strong>.</span></div>`:''}
+      <span style="font-size:13px;grid-column:1/-1;font-weight:600;margin-top:4px">📦 Parent — Things to Carry</span>
+      <div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+        <select id="tc-pdf-select" style="font-size:12px;padding:5px 8px;border:1.5px solid #cbd5e0;border-radius:6px;background:#fff;color:#1a202c;min-width:200px">
+          <option value="">— No PDF (message only) —</option>
+          ${settings.pdfVisiting?`<option value="${settings.pdfVisiting}">Visiting Programme PDF</option>`:''}
+          ${settings.pdfAnnual?`<option value="${settings.pdfAnnual}">Annual Programme PDF</option>`:''}
+        </select>
+        <button class="btn btn-sm btn-wa" onclick="sendTCWhatsApp()">💬 WA</button>
+        <button class="btn btn-sm btn-secondary" onclick="sendTCEmail('${b.studentName}','${b.id}')">📧 Email</button>
+      </div>
       `:'<span></span><span></span><span></span>'}
     </div>
     <div class="card-title">Reminders</div>
@@ -1681,19 +1688,18 @@ function sendTravelWA(id) {
 }
 
 function sendTCWhatsApp() {
-  const msg = window._tcMsg || '';
+  const b = bookings.find(x => x.id === window._tcBookingId);
+  const pdfLink = (document.getElementById('tc-pdf-select')||{}).value || '';
+  const msg = b ? buildThingsToCarryMsg(b, pdfLink) : (window._tcMsg || '');
   const num = window._tcPhone || '';
-  if (window._tcPdfMissing) {
-    const banner = document.getElementById('tc-pdf-warning');
-    if (banner) { banner.style.display = 'flex'; setTimeout(()=>banner.style.display='none', 8000); }
-  }
   const url = num ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
 }
 
 function sendTCEmail(studentName, bookingId) {
-  const msg = window._tcMsg || '';
   const b = bookings.find(x => x.id === bookingId);
+  const pdfLink = (document.getElementById('tc-pdf-select')||{}).value || '';
+  const msg = b ? buildThingsToCarryMsg(b, pdfLink) : (window._tcMsg || '');
   sendEmailMsg('parent', encodeURIComponent(msg), 'Things to Carry — ' + studentName, b);
 }
 
