@@ -737,33 +737,41 @@ function loadState() {
     const savedSettings = localStorage.getItem('golf_settings_v2');
     if (savedSettings) { settings = Object.assign({}, settings, JSON.parse(savedSettings)); applySettingsToUI(); initEmailJS(); }
     else { applySettingsToUI(); initEmailJS(); }
-    // Load local bookings first so UI is responsive immediately
-    const saved = localStorage.getItem('golf_bookings_v5');
-    bookings = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(SAMPLE_DATA));
-    if (!saved) saveState();
-    renderDashboard();
-    // Then fetch from Google Sheet in background and merge
-    if (settings.sheetUrl) loadFromSheet();
-  } catch(e) { bookings = JSON.parse(JSON.stringify(SAMPLE_DATA)); }
+    // If sheet URL configured, always load from sheet (skip localStorage for bookings)
+    if (settings.sheetUrl) {
+      bookings = [];
+      renderDashboard();
+      loadFromSheet();
+    } else {
+      // No sheet — fall back to localStorage
+      const saved = localStorage.getItem('golf_bookings_v5');
+      bookings = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(SAMPLE_DATA));
+      if (!saved) saveState();
+      renderDashboard();
+    }
+  } catch(e) { bookings = JSON.parse(JSON.stringify(SAMPLE_DATA)); renderDashboard(); }
 }
 
 async function loadFromSheet() {
   if(!settings.sheetUrl) return;
   try {
-    // Apps Script GET supports CORS — fetch all bookings from sheet
     const url = settings.sheetUrl + '?action=getAll&t=' + Date.now();
     const resp = await fetch(url, {method:'GET', mode:'cors'});
     if (!resp.ok) { console.warn('Sheet load failed:', resp.status); return; }
     const data = await resp.json();
-    if (!data.bookings || !Array.isArray(data.bookings) || data.bookings.length === 0) return;
-    // Keep local drafts not yet in sheet, replace everything else with sheet data
+    if (!data.bookings || !Array.isArray(data.bookings)) return;
+    // Keep any local unsaved drafts, merge with sheet data
     const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id));
     bookings = [...data.bookings, ...localDrafts];
-    saveState();
+    // Save clean sheet data to localStorage
+    localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
     renderDashboard();
     console.log('✓ Loaded ' + data.bookings.length + ' bookings from Google Sheet');
   } catch(e) {
-    console.warn('Could not load from sheet, using local data:', e.message);
+    // Sheet failed — fall back to localStorage
+    console.warn('Sheet load failed, using local cache:', e.message);
+    const saved = localStorage.getItem('golf_bookings_v5');
+    if (saved) { bookings = JSON.parse(saved); renderDashboard(); }
   }
 }
 
