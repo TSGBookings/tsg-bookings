@@ -1653,7 +1653,7 @@ function viewBooking(id) {
     </div>
     <div class="card-title">Reminders</div>
     <div style="margin-bottom:16px">
-      ${b.reminders.map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f4f8"><span>${r.done?'✅':'⏳'}</span><span style="flex:1;font-size:13px">${r.label} — ${fmtDate(r.dueDate)}</span>${!r.done?`<button class="btn btn-sm btn-secondary" onclick="markDoneFromModal('${b.id}','${r.type}')">Mark Done</button>`:''}</div>`).join('')}
+      ${(b.reminders||[]).map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f4f8"><span>${r.done?'✅':'⏳'}</span><span style="flex:1;font-size:13px">${r.label} — ${fmtDate(r.dueDate)}</span>${!r.done?`<button class="btn btn-sm btn-secondary" onclick="markDoneFromModal('${b.id}','${r.type}')">Mark Done</button>`:''}</div>`).join('')}
     </div>
     <div class="flex gap-8"><button class="btn btn-secondary btn-sm" onclick="editBooking('${b.id}')">✏️ Edit Booking</button><button class="btn btn-danger btn-sm" onclick="deleteBooking('${b.id}')">🗑 Delete Booking</button></div>
   `;
