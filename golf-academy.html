@@ -861,6 +861,21 @@ function fmtDay(d) {
   if (!d) return '';
   return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short'});
 }
+function fmtTime(t) {
+  if (!t) return '';
+  var s = String(t).trim();
+  // Already HH:MM
+  if (/^\d{1,2}:\d{2}$/.test(s)) return s;
+  // Full date string like "Sat Dec 30 1899 14:00:00 GMT+0521..."
+  var m = s.match(/\d{1,2}:\d{2}/);
+  if (m) return m[0];
+  // Try parsing as Date object
+  var d = new Date(s);
+  if (!isNaN(d)) {
+    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  }
+  return s;
+}
 function inclBadges(arr) {
   const icons={Golf:'⛳',Fitness:'💪',Food:'🍽️',Stay:'🏠','Airport Pick-up':'✈️'};
   return (arr||[]).map(i=>`<span class="badge badge-green">${icons[i]||''} ${i}</span>`).join('');
@@ -946,7 +961,7 @@ function renderDashboard() {
     return `<tr>
       <td><strong>${b.studentName}</strong>${onCampusNow?'<span class="badge badge-green" style="margin-left:6px">On Campus</span>':''}<br><span class="text-sm text-muted">${b.age}y · ${b.gender} · ${b.homeCity}</span><br><span class="text-sm text-muted">${b.parentName||''} · ${b.phone||''}</span></td>
       <td>${progBadge(b.programmeType)}</td>
-      <td>${fmtDateShort(b.arrivalDate)}<br><span class="text-sm text-muted">${b.arrivalTime||''}</span></td>
+      <td>${fmtDateShort(b.arrivalDate)}<br><span class="text-sm text-muted">${fmtTime(b.arrivalTime)}</span></td>
       <td>${fmtDateShort(b.departureDate)}</td>
       <td>${inclBadges(b.inclusions)}</td>
       <td><strong>₹${total.toLocaleString('en-IN')}</strong></td>
@@ -976,7 +991,7 @@ function renderMonthly() {
     <div class="checkin-row" onclick="viewBooking('${b.id}')" style="cursor:pointer">
       <div>
         <div class="checkin-date">${new Date(b.arrivalDate+'T00:00:00').getDate()}</div>
-        <div class="checkin-date-sub">${fmtDay(b.arrivalDate)}<br>${b.arrivalTime||'TBD'}</div>
+        <div class="checkin-date-sub">${fmtDay(b.arrivalDate)}<br>${fmtTime(b.arrivalTime)||'TBD'}</div>
       </div>
       <div>
         <div class="col-label">Student · Age · From</div>
@@ -1014,7 +1029,7 @@ function renderMonthly() {
         <div class="pt-sub">${b.age||'—'} yrs · ${b.homeCity||'—'}</div>
       </td>
       <td><span class="pt-badge ${b.programmeType?'badge-'+b.programmeType.toLowerCase().replace(/\s+/g,'-'):''}" style="background:#e6f4ee;color:#276749">${b.programmeType||'—'}</span></td>
-      <td class="pt-date">${fmtDateShort(b.arrivalDate)}<br><span class="pt-sub">${b.arrivalTime||''}</span></td>
+      <td class="pt-date">${fmtDateShort(b.arrivalDate)}<br><span class="pt-sub">${fmtTime(b.arrivalTime)}</span></td>
       <td class="pt-date">${b.trainingStartDate?fmtDateShort(b.trainingStartDate):'—'}</td>
       <td class="pt-date">${b.trainingEndDate?fmtDateShort(b.trainingEndDate):'—'}</td>
       <td class="pt-date">${fmtDateShort(b.departureDate)}</td>
@@ -1128,7 +1143,7 @@ function step2HTML() {
         <input id="f-prog-other" value="${f.programmeTypeOther||''}" placeholder="Describe the programme…">
       </div>
       <div class="form-group"><label>Arrival Date *</label><input id="f-arrival" type="date" value="${f.arrivalDate||''}"></div>
-      <div class="form-group"><label>Arrival Time</label><input id="f-atime" type="time" value="${f.arrivalTime||''}"></div>
+      <div class="form-group"><label>Arrival Time</label><input id="f-atime" type="time" value="${fmtTime(f.arrivalTime)}"></div>
       <div class="form-group"><label>Training Start Date</label><input id="f-train-start" type="date" value="${f.trainingStartDate||''}"></div>
       <div class="form-group"><label>Training End Date</label><input id="f-train-end" type="date" value="${f.trainingEndDate||''}"></div>
       <div class="form-group"><label>Training Period</label><input id="f-period" value="${f.trainingPeriod||''}" placeholder="e.g. 2 weeks"></div>
@@ -1343,7 +1358,7 @@ function buildMessages(f) {
 👨‍👩‍👦 Parent: ${f.parentName} — ${f.phone||'—'}
 📧 Email: ${f.email||'—'}
 
-📅 Arrival: ${fmtDate(f.arrivalDate)} at ${f.arrivalTime||'TBD'}
+📅 Arrival: ${fmtDate(f.arrivalDate)} at ${fmtTime(f.arrivalTime)||'TBD'}
 📅 Departure: ${fmtDate(f.departureDate)}
 🏌️ Training: ${f.trainingStartDate?fmtDate(f.trainingStartDate)+' → '+fmtDate(f.trainingEndDate):f.trainingPeriod||'—'}
 🏌️ Programme: ${f.programmeType}
@@ -1393,7 +1408,7 @@ Please raise invoice and share payment link with parent.`;
 ━━━━━━━━━━━━━━━━━━━━
 Student: ${f.studentName} (${f.age||'—'}y, ${f.gender||'—'})
 Coming From: ${f.homeCity||'—'}
-Check-in: ${fmtDate(f.arrivalDate)} at ${f.arrivalTime||'TBD'}
+Check-in: ${fmtDate(f.arrivalDate)} at ${fmtTime(f.arrivalTime)||'TBD'}
 Check-out: ${fmtDate(f.departureDate)}
 ${hasStay?'\n🛏 Accommodation: Required — please allocate and prepare room.':''}
 ${hasFood?'\n🍽️ Meals: Required for full stay duration.':''}
@@ -1601,7 +1616,7 @@ function viewBooking(id) {
       <div><div class="col-label">Parent</div><div class="col-value">${b.parentName}</div></div>
       <div><div class="col-label">Phone</div><div class="col-value"><a href="tel:${b.phone}" style="color:#38a169">${b.phone||'—'}</a></div></div>
       <div><div class="col-label">Email</div><div class="col-value">${b.email||'—'}</div></div>
-      <div><div class="col-label">Arrival</div><div class="col-value">${fmtDate(b.arrivalDate)} ${b.arrivalTime?'at '+b.arrivalTime:''}</div></div>
+      <div><div class="col-label">Arrival</div><div class="col-value">${fmtDate(b.arrivalDate)} ${b.arrivalTime?'at '+fmtTime(b.arrivalTime):''}</div></div>
       <div><div class="col-label">Departure</div><div class="col-value">${fmtDate(b.departureDate)}</div></div>
       <div><div class="col-label">Training Start</div><div class="col-value">${b.trainingStartDate?fmtDate(b.trainingStartDate):'—'}</div></div>
       <div><div class="col-label">Training End</div><div class="col-value">${b.trainingEndDate?fmtDate(b.trainingEndDate):'—'}</div></div>
@@ -1656,7 +1671,7 @@ function sendTravelWA(id) {
   if (b.flightArrivalTime) lines.push(`🕐 Arrival Time: ${b.flightArrivalTime}${b.terminal ? ' | Terminal: ' + b.terminal : ''}`);
   if (b.accompanyingStaff) lines.push(`👤 TSG Staff for Pick-up: ${b.accompanyingStaff}`);
   lines.push('━━━━━━━━━━━━━━━━━━━━');
-  lines.push(`📅 Student Arrival: ${fmtDate(b.arrivalDate)}${b.arrivalTime ? ' at ' + b.arrivalTime : ''}`);
+  lines.push(`📅 Student Arrival: ${fmtDate(b.arrivalDate)}${b.arrivalTime ? ' at ' + fmtTime(b.arrivalTime) : ''}`);
   const msg = lines.join('\n');
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
@@ -1743,7 +1758,7 @@ Dear ${b.parentName},
 
 This is a friendly reminder that ${b.studentName}'s ${b.programmeType} programme begins tomorrow:
 
-📅 Arrival: ${fmtDate(b.arrivalDate)} at ${b.arrivalTime||'TBD'}
+📅 Arrival: ${fmtDate(b.arrivalDate)} at ${fmtTime(b.arrivalTime)||'TBD'}
 🗓 Training: ${b.trainingPeriod||'—'}
 📅 Departure: ${fmtDate(b.departureDate)}
 
@@ -1769,7 +1784,7 @@ function sendReminderEmail(bookingId, type) {
 
 This is a friendly reminder that ${b.studentName}'s ${b.programmeType} programme begins tomorrow:
 
-Arrival: ${fmtDate(b.arrivalDate)} at ${b.arrivalTime||'TBD'}
+Arrival: ${fmtDate(b.arrivalDate)} at ${fmtTime(b.arrivalTime)||'TBD'}
 Training: ${b.trainingPeriod||'—'}
 Departure: ${fmtDate(b.departureDate)}
 
