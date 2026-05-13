@@ -734,13 +734,37 @@ function init() {
 
 function loadState() {
   try {
-    const saved = localStorage.getItem('golf_bookings_v5');
-    bookings = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(SAMPLE_DATA));
-    if (!saved) saveState();
     const savedSettings = localStorage.getItem('golf_settings_v2');
     if (savedSettings) { settings = Object.assign({}, settings, JSON.parse(savedSettings)); applySettingsToUI(); initEmailJS(); }
     else { applySettingsToUI(); initEmailJS(); }
+    // Load local bookings first so UI is responsive immediately
+    const saved = localStorage.getItem('golf_bookings_v5');
+    bookings = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(SAMPLE_DATA));
+    if (!saved) saveState();
+    renderDashboard();
+    // Then fetch from Google Sheet in background and merge
+    if (settings.sheetUrl) loadFromSheet();
   } catch(e) { bookings = JSON.parse(JSON.stringify(SAMPLE_DATA)); }
+}
+
+async function loadFromSheet() {
+  try {
+    const url = settings.sheetUrl.replace('/exec', '/exec') + '?action=getAll';
+    const resp = await fetch(url, {mode:'cors'});
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (!data.bookings || !Array.isArray(data.bookings)) return;
+    if (data.bookings.length === 0) return;
+    // Merge: sheet is source of truth — replace local with sheet data
+    // but keep any local drafts that haven't been synced yet
+    const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id));
+    bookings = [...data.bookings, ...localDrafts];
+    saveState();
+    renderDashboard();
+    console.log('Loaded '+data.bookings.length+' bookings from Google Sheet');
+  } catch(e) {
+    console.warn('Could not load from sheet, using local data:', e);
+  }
 }
 
 function initEmailJS() {
