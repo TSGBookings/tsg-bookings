@@ -748,22 +748,22 @@ function loadState() {
 }
 
 async function loadFromSheet() {
+  if(!settings.sheetUrl) return;
   try {
-    const url = settings.sheetUrl.replace('/exec', '/exec') + '?action=getAll';
-    const resp = await fetch(url, {mode:'cors'});
-    if (!resp.ok) return;
+    // Apps Script GET supports CORS — fetch all bookings from sheet
+    const url = settings.sheetUrl + '?action=getAll&t=' + Date.now();
+    const resp = await fetch(url, {method:'GET', mode:'cors'});
+    if (!resp.ok) { console.warn('Sheet load failed:', resp.status); return; }
     const data = await resp.json();
-    if (!data.bookings || !Array.isArray(data.bookings)) return;
-    if (data.bookings.length === 0) return;
-    // Merge: sheet is source of truth — replace local with sheet data
-    // but keep any local drafts that haven't been synced yet
+    if (!data.bookings || !Array.isArray(data.bookings) || data.bookings.length === 0) return;
+    // Keep local drafts not yet in sheet, replace everything else with sheet data
     const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id));
     bookings = [...data.bookings, ...localDrafts];
     saveState();
     renderDashboard();
-    console.log('Loaded '+data.bookings.length+' bookings from Google Sheet');
+    console.log('✓ Loaded ' + data.bookings.length + ' bookings from Google Sheet');
   } catch(e) {
-    console.warn('Could not load from sheet, using local data:', e);
+    console.warn('Could not load from sheet, using local data:', e.message);
   }
 }
 
@@ -1791,7 +1791,8 @@ async function testSheetsSync(){const url=document.getElementById('s-sheet-url')
 async function syncToSheets(booking){
   if(!settings.sheetUrl)return;
   try{
-    await fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'addBooking',booking}),headers:{'Content-Type':'text/plain'}});
+    // no-cors is fine for writes — request reaches server even without response
+    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'addBooking',booking}),headers:{'Content-Type':'text/plain'}});
   }catch(e){console.warn('Sheets sync failed:',e);}
 }
 
