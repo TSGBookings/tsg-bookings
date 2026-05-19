@@ -981,7 +981,7 @@ function fmtDay(d) {
   return dt.toLocaleDateString('en-IN',{weekday:'short'});
 }
 function fmtTime(t) {
-  if (!t) return '';
+  if (t === null || t === undefined || t === '' || t === 'undefined' || t === 'null') return '';
   try {
     var s = String(t).trim();
     if (!s) return '';
