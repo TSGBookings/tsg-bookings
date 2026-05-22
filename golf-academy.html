@@ -678,9 +678,16 @@ textarea { resize: vertical; min-height: 80px; }
           <textarea id="lh-notes" placeholder="e.g. Father very keen, mentioned sibling — confirm if discount applies. Wants June slot."></textarea>
         </div>
       </div>
-      <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
-        <button class="btn btn-primary" onclick="sendLeadHandoff()" style="background:#7c3aed">📲 Send via WhatsApp</button>
-        <span id="lh-status" style="font-size:12px;color:var(--text-muted)"></span>
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-primary" onclick="sendLeadHandoff()" style="background:#7c3aed">📲 Hand Off to Teammate</button>
+          <span id="lh-status" style="font-size:12px;color:var(--text-muted)"></span>
+        </div>
+        <div style="border-top:1px solid #e2e8f0;padding-top:12px">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-weight:600">SEND TO PARENT (requires phone number above)</div>
+          <button class="btn btn-wa" onclick="sendParentBookingLink()" style="font-size:13px">💬 Send Booking Link to Parent</button>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;font-style:italic">"We need a few details to confirm your booking and raise the invoice. Please click the link and submit the details. Our admin office will be in touch within 24 hours."</div>
+        </div>
       </div>
     </div>
   </div>
@@ -864,8 +871,9 @@ async function loadFromSheet() {
     if (!resp.ok) { console.warn('Sheet load failed:', resp.status); return; }
     const data = await resp.json();
     if (!data.bookings || !Array.isArray(data.bookings)) return;
-    // Keep any local unsaved drafts, merge with sheet data
+    // Merge: sheet data is authoritative; keep any local drafts not yet synced to sheet
     const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id));
+    // data.bookings already includes sheet-stored drafts (isDraft:true rows from sheet)
     bookings = [...data.bookings, ...localDrafts];
     // Save clean sheet data to localStorage
     localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
@@ -930,7 +938,12 @@ async function sendEmail(toEmail, toName, subject, body, booking) {
     return true;
   } catch(err) {
     console.error('Email send failed:', err);
-    alert('Email failed: ' + (err.text || err.message || 'unknown error'));
+    const errMsg = err.text || err.message || 'unknown error';
+    if (errMsg.toLowerCase().includes('service') || errMsg.toLowerCase().includes('template') || errMsg.toLowerCase().includes('public key')) {
+      alert('Email failed: EmailJS credentials are not set up correctly.\n\nGo to Settings → EmailJS Credentials and enter the correct Public Key, Service ID, and Template ID.\n\n(Error: ' + errMsg + ')');
+    } else {
+      alert('Email failed: ' + errMsg);
+    }
     return false;
   }
 }
@@ -981,7 +994,7 @@ function fmtDay(d) {
   return dt.toLocaleDateString('en-IN',{weekday:'short'});
 }
 function fmtTime(t) {
-  if (t === null || t === undefined || t === '' || t === 'undefined' || t === 'null') return '';
+  if (!t) return '';
   try {
     var s = String(t).trim();
     if (!s) return '';
@@ -1643,15 +1656,18 @@ function saveDraft(fromStep){
     if(!confirm('No student name entered. Save as untitled draft?'))return;
     formData.studentName='(Untitled draft)';
   }
+  let draftToSync;
   if(editingBookingId){
     const idx=bookings.findIndex(b=>b.id===editingBookingId);
-    if(idx>=0) bookings[idx]={...bookings[idx],...formData,isDraft:true,lastSavedStep:fromStep};
+    if(idx>=0){bookings[idx]={...bookings[idx],...formData,isDraft:true,lastSavedStep:fromStep};draftToSync=bookings[idx];}
   } else {
     const draft={id:uid(),...formData,isDraft:true,dispatched:false,createdAt:today(),reminders:[],lastSavedStep:fromStep};
     bookings.push(draft);
     editingBookingId=draft.id;
+    draftToSync=draft;
   }
   saveState();
+  if(draftToSync) syncToSheets(draftToSync); // sync draft so all team members can see it
   alert('Draft saved. You can resume it from the Dashboard.');
   initBookingForm();
   showSection('dashboard',document.querySelector('[data-section=dashboard]'));
@@ -1661,6 +1677,10 @@ function deleteDraft(id){
   if(!confirm('Delete this draft?'))return;
   bookings=bookings.filter(b=>b.id!==id);
   saveState();
+  // Also remove from sheet
+  if(settings.sheetUrl){
+    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'deleteBooking',id}),headers:{'Content-Type':'text/plain'}});
+  }
   renderDashboard();
 }
 
@@ -1886,7 +1906,7 @@ function renderReminders() {
   }).join('');
 }
 
-function markDone(bookingId,type){const b=bookings.find(x=>x.id===bookingId);if(!b)return;const r=b.reminders.find(x=>x.type===type);if(r)r.done=true;saveState();renderReminders();}
+function markDone(bookingId,type){const b=bookings.find(x=>x.id===bookingId);if(!b)return;const r=b.reminders.find(x=>x.type===type);if(r)r.done=true;saveState();syncToSheets(b);renderReminders();}
 
 function sendReminder(bookingId,type) {
   const b=bookings.find(x=>x.id===bookingId);
@@ -2211,8 +2231,38 @@ function sendLeadHandoff() {
     };
     bookings.push(draft);
     saveState();
+    syncToSheets(draft); // sync handoff draft so all team members see it
     renderDashboard();
   }
+}
+
+function sendParentBookingLink() {
+  const name   = document.getElementById('lh-name').value.trim();
+  const parent = document.getElementById('lh-parent').value.trim();
+  const phone  = document.getElementById('lh-phone').value.trim();
+  if (!phone) { alert('Please enter the parent\'s phone number (with country code) to send via WhatsApp.'); return; }
+
+  const params = new URLSearchParams();
+  if (name)   params.set('lh_name',   name);
+  if (parent) params.set('lh_parent', parent);
+  const age    = document.getElementById('lh-age').value.trim();    if (age)    params.set('lh_age',    age);
+  const gender = document.getElementById('lh-gender').value;         if (gender) params.set('lh_gender', gender);
+  const city   = document.getElementById('lh-city').value.trim();   if (city)   params.set('lh_city',   city);
+  params.set('lh_phone', phone);
+  const email  = document.getElementById('lh-email').value.trim();  if (email)  params.set('lh_email',  email);
+  const prog   = document.getElementById('lh-prog').value;           if (prog)   params.set('lh_prog',   prog);
+
+  const parentFirstName = (parent || 'there').split(' ')[0];
+  const msg =
+    `Dear ${parentFirstName},\n\n` +
+    `We need a few details to confirm your booking and raise the invoice. ` +
+    `Please click the link and submit the details. ` +
+    `Our admin office will be in touch within 24 hours.\n\n` +
+    `https://www.tsgacademy.in/visiting-students-form.php\n\n` +
+    `Warm regards,\nTSG Golf Academy`;
+
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+  document.getElementById('lh-status').textContent = '✓ WhatsApp opened for parent';
 }
 
 function checkLeadHandoffParams() {
