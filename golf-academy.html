@@ -540,6 +540,10 @@ textarea { resize: vertical; min-height: 80px; }
               <label>Hospitality</label>
               <input id="s-wa-hospitality" type="text" placeholder="919876543210">
             </div>
+            <div class="form-group">
+              <label>Transport / Airport Pick-up</label>
+              <input id="s-wa-transport" type="text" placeholder="919876543210">
+            </div>
           </div>
           <div class="settings-tip">Enter numbers with country code, no + or spaces. E.g. 919876543210 for India.</div>
         </div>
@@ -823,6 +827,7 @@ let settings = {
   waOps: '918630474693',
   waAccounts: '919663185295',
   waHospitality: '919487823055',
+  waTransport: '',
   emailAdmin: 'vinod@tsgolf.in',
   emailOps: 'rohit@tsgolf.in',
   emailAccounts: 'accounts@tsgolf.in',
@@ -951,7 +956,7 @@ async function sendEmail(toEmail, toName, subject, body, booking) {
 function saveState() { localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings)); }
 
 function applySettingsToUI() {
-  const map = {'waAdmin':'s-wa-admin','waOps':'s-wa-ops','waAccounts':'s-wa-accounts','waHospitality':'s-wa-hospitality',
+  const map = {'waAdmin':'s-wa-admin','waOps':'s-wa-ops','waAccounts':'s-wa-accounts','waHospitality':'s-wa-hospitality','waTransport':'s-wa-transport',
     'emailAdmin':'s-email-admin','emailOps':'s-email-ops','emailAccounts':'s-email-accounts','emailHospitality':'s-email-hospitality',
     'emailjsKey':'s-emailjs-key','emailjsService':'s-emailjs-service','emailjsTemplate':'s-emailjs-template',
     'sheetId':'s-sheet-id','sheetUrl':'s-sheet-url',
@@ -1424,8 +1429,11 @@ function step3HTML() {
   const f=formData;
   const {opsMsg,accountsMsg,hospitalityMsg,reminderDate}=buildMessages(f);
   const inc=f.inclusions||[], hasHospitality=inc.includes('Food')||inc.includes('Stay');
+  const hasTravel=inc.includes('Airport Pick-up')||f.travellerName||f.flightNo||f.flightArrivalTime;
   const encOps=encodeURIComponent(opsMsg), encAcc=encodeURIComponent(accountsMsg);
   const encHosp=hospitalityMsg?encodeURIComponent(hospitalityMsg):'';
+  const travelMsg=buildTravelMsg(f);
+  window._step3TravelMsg = travelMsg;
   return `<div class="card">
     <div class="card-title">Step 3 of 4 — Preview & Dispatch</div>
     <div class="msg-section">
@@ -1441,6 +1449,7 @@ function step3HTML() {
       <div class="msg-preview">${accountsMsg}</div>
     </div>
     ${hasHospitality?`<div class="msg-section"><div class="msg-header"><div class="msg-title">🏠 Hospitality — Room & Meal Prep</div><div class="flex gap-8"><button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encHosp}','hospitality')">💬 WhatsApp</button><button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('hospitality','${encHosp}','Hospitality — '+'${(f.studentName||'').replace(/'/g,'')}',formData)">📧 Email</button></div></div><div class="msg-preview">${hospitalityMsg}</div></div>`:''}
+    ${hasTravel?`<div class="msg-section"><div class="msg-header"><div class="msg-title">✈️ Transport — Travel Brief</div><div class="flex gap-8"><button class="btn btn-sm btn-wa" onclick="openWAWithMsg(encodeURIComponent(window._step3TravelMsg),'transport')">💬 WhatsApp</button></div></div><div class="msg-preview">${travelMsg.replace(/\n/g,'<br>')}</div></div>`:''}
     <div class="card" style="background:#f0fff4;border:1.5px solid #c6f6d5;margin-top:4px">
       <div class="card-title" style="color:#276749">🔔 Auto-Scheduled Reminders — 1 Day Before Arrival (${fmtDate(reminderDate)})</div>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
@@ -1732,7 +1741,7 @@ function viewBooking(id) {
   const b=bookings.find(x=>x.id===id);
   if(!b) { alert('Booking not found: '+id); return; }
   const {opsMsg,accountsMsg,hospitalityMsg}=buildMessages(b);
-  const inc=b.inclusions||[], hasHospitality=inc.includes('Food')||inc.includes('Stay');
+  const inc=b.inclusions||[], hasHospitality=inc.includes('Food')||inc.includes('Stay'), hasAirport=inc.includes('Airport Pick-up');
   const isSingleSession=(b.programmeType||'').toLowerCase().includes('single session');
   const isAnnual=(b.programmeType||'').toLowerCase().includes('annual');
   const {base,misc,netFee,preGst,gst,discount,total,gstOn,discOn}=calcInvoice(b);
@@ -1768,7 +1777,23 @@ function viewBooking(id) {
       <div><div class="col-label">Training Period</div><div class="col-value">${b.trainingPeriod||'—'}</div></div>
       <div><div class="col-label">Inclusions</div><div class="col-value">${inclBadges(b.inclusions)}</div></div>
     </div>
-    ${(b.travellerName||b.flightNo||b.flightArrivalTime)?`<div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><strong>✈️ Travel Details</strong><button class="btn btn-sm btn-wa" onclick="sendTravelWA('${b.id}')">💬 Send via WhatsApp</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">${b.travellerName?`<div><span class="col-label">Traveller</span><div>${b.travellerName}${b.travellerContact?' · '+b.travellerContact:''}</div></div>`:''} ${b.flightNo?`<div><span class="col-label">Flight/Train</span><div>${b.flightNo}</div></div>`:''} ${b.flightArrivalTime?`<div><span class="col-label">Arrival Time</span><div>${b.flightArrivalTime}${b.terminal?' | Terminal: '+b.terminal:''}</div></div>`:''} ${b.accompanyingStaff?`<div><span class="col-label">TSG Staff Pick-up</span><div>${b.accompanyingStaff}</div></div>`:''}</div></div>`:''}
+    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <strong>✈️ Travel Details</strong>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-secondary" onclick="saveTravelDetails('${b.id}')">💾 Save</button>
+          <button class="btn btn-sm btn-wa" onclick="sendTravelWA('${b.id}')">💬 WhatsApp</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
+        <div><span class="col-label">Traveller Name</span><input id="vtd-trav-name-${b.id}" value="${b.travellerName||''}" placeholder="Name of person arriving" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">Traveller Contact</span><input id="vtd-trav-contact-${b.id}" value="${b.travellerContact||''}" placeholder="Mobile number" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">Flight / Train No.</span><input id="vtd-flight-no-${b.id}" value="${b.flightNo||''}" placeholder="e.g. AI 504" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">Flight Arrival Time</span><input id="vtd-flight-time-${b.id}" type="time" value="${b.flightArrivalTime||''}" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">Terminal</span><input id="vtd-terminal-${b.id}" value="${b.terminal||''}" placeholder="e.g. T2, Domestic" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">TSG Staff for Pick-up</span><input id="vtd-staff-${b.id}" value="${b.accompanyingStaff||''}" placeholder="Staff name" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+      </div>
+    </div>
     <div class="invoice-summary" style="margin-bottom:16px">${invoiceLines}${b.accountsNotes?`<div style="margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:12px;color:#718096"><strong>Accounts note:</strong> ${b.accountsNotes}</div>`:''}</div>
     ${b.specialNotes?`<div style="background:#fffbeb;border:1.5px solid #fbd38d;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px"><strong>Notes:</strong> ${b.specialNotes}</div>`:''}
     <div class="card-title">Dispatch Messages</div>
@@ -1788,6 +1813,10 @@ function viewBooking(id) {
       ${hasHospitality?`<span style="font-size:13px">🏠 Hospitality</span>
       <button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encodeURIComponent(hospitalityMsg)}','hospitality')">💬 WA</button>
       <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('hospitality','${encodeURIComponent(hospitalityMsg)}','Hospitality — ${b.studentName}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>`:'<span></span><span></span><span></span>'}
+
+      ${hasAirport?`<span style="font-size:13px">✈️ Transport</span>
+      <button class="btn btn-sm btn-wa" onclick="sendTravelWA('${b.id}')">💬 WA</button>
+      <span></span>`:''}
 
       ${!isSingleSession?`
       <span style="font-size:13px;grid-column:1/-1;font-weight:600;margin-top:4px">📦 Parent — Things to Carry</span>
@@ -1812,20 +1841,40 @@ function viewBooking(id) {
   } catch(err) { alert('View error: ' + err.message); console.error(err); }
 }
 
+function buildTravelMsg(f) {
+  const lines = [];
+  lines.push(`✈️ *Travel Brief — ${f.studentName}*`);
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  if (f.travellerName) lines.push(`🧳 Traveller: ${f.travellerName}${f.travellerContact ? ' — ' + f.travellerContact : ''}`);
+  if (f.flightNo) lines.push(`✈ Flight/Train: ${f.flightNo}`);
+  if (f.flightArrivalTime) lines.push(`🕐 Arrival Time: ${f.flightArrivalTime}${f.terminal ? ' | Terminal: ' + f.terminal : ''}`);
+  if (f.accompanyingStaff) lines.push(`👤 TSG Staff for Pick-up: ${f.accompanyingStaff}`);
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push(`📅 Student Arrival: ${fmtDate(f.arrivalDate)}${f.arrivalTime ? ' at ' + fmtTime(f.arrivalTime) : ''}`);
+  return lines.join('\n');
+}
+
 function sendTravelWA(id) {
   const b = bookings.find(x => x.id === id);
   if (!b) return;
-  const lines = [];
-  lines.push(`✈️ *Travel Brief — ${b.studentName}*`);
-  lines.push('━━━━━━━━━━━━━━━━━━━━');
-  if (b.travellerName) lines.push(`🧳 Traveller: ${b.travellerName}${b.travellerContact ? ' — ' + b.travellerContact : ''}`);
-  if (b.flightNo) lines.push(`✈ Flight/Train: ${b.flightNo}`);
-  if (b.flightArrivalTime) lines.push(`🕐 Arrival Time: ${b.flightArrivalTime}${b.terminal ? ' | Terminal: ' + b.terminal : ''}`);
-  if (b.accompanyingStaff) lines.push(`👤 TSG Staff for Pick-up: ${b.accompanyingStaff}`);
-  lines.push('━━━━━━━━━━━━━━━━━━━━');
-  lines.push(`📅 Student Arrival: ${fmtDate(b.arrivalDate)}${b.arrivalTime ? ' at ' + fmtTime(b.arrivalTime) : ''}`);
-  const msg = lines.join('\n');
+  const msg = buildTravelMsg(b);
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+function saveTravelDetails(id) {
+  const b = bookings.find(x => x.id === id);
+  if (!b) return;
+  b.travellerName    = (document.getElementById('vtd-trav-name-'+id)||{}).value||'';
+  b.travellerContact = (document.getElementById('vtd-trav-contact-'+id)||{}).value||'';
+  b.flightNo         = (document.getElementById('vtd-flight-no-'+id)||{}).value||'';
+  b.flightArrivalTime= (document.getElementById('vtd-flight-time-'+id)||{}).value||'';
+  b.terminal         = (document.getElementById('vtd-terminal-'+id)||{}).value||'';
+  b.accompanyingStaff= (document.getElementById('vtd-staff-'+id)||{}).value||'';
+  saveState();
+  syncToSheets(b);
+  // Flash the Save button green to confirm
+  const btn = document.querySelector(`[onclick="saveTravelDetails('${id}')"]`);
+  if (btn) { const orig=btn.textContent; btn.textContent='✓ Saved'; btn.style.background='#38a169'; btn.style.color='#fff'; setTimeout(()=>{btn.textContent=orig;btn.style.background='';btn.style.color='';},1800); }
 }
 
 function sendTCWhatsApp() {
@@ -1841,7 +1890,6 @@ function sendTCEmail(studentName, bookingId) {
   const b = bookings.find(x => x.id === bookingId);
   const pdfLink = (document.getElementById('tc-pdf-select')||{}).value || '';
   const msg = b ? buildThingsToCarryMsg(b, pdfLink) : (window._tcMsg || '');
-  alert('DEBUG — pdfLink: ' + (pdfLink||'(empty)') + '\n\nMessage preview:\n' + msg.substring(0, 300));
   sendEmailMsg('parent', encodeURIComponent(msg), 'Things to Carry — ' + studentName, b);
 }
 
@@ -1860,7 +1908,7 @@ function openWAWithMsg(encodedMsg, team, phone) {
     window.open(url,'_blank');
     return;
   }
-  const num = team==='accounts'?settings.waAccounts : team==='hospitality'?settings.waHospitality : phone||'';
+  const num = team==='accounts'?settings.waAccounts : team==='hospitality'?settings.waHospitality : team==='transport'?settings.waTransport : phone||'';
   const url=num?`https://wa.me/${num}?text=${encoded}`:`https://wa.me/?text=${encoded}`;
   window.open(url,'_blank');
 }
@@ -1967,7 +2015,7 @@ Reply or call us anytime.
 
 // ===================== SETTINGS =====================
 function saveSettings() {
-  settings={waAdmin:(document.getElementById('s-wa-admin')||{}).value||'',waOps:document.getElementById('s-wa-ops').value,waAccounts:document.getElementById('s-wa-accounts').value,waHospitality:document.getElementById('s-wa-hospitality').value,emailAdmin:(document.getElementById('s-email-admin')||{}).value||'',emailOps:(document.getElementById('s-email-ops')||{}).value||'',emailAccounts:(document.getElementById('s-email-accounts')||{}).value||'',emailHospitality:(document.getElementById('s-email-hospitality')||{}).value||'',emailjsKey:document.getElementById('s-emailjs-key').value,emailjsService:document.getElementById('s-emailjs-service').value,emailjsTemplate:document.getElementById('s-emailjs-template').value,sheetId:document.getElementById('s-sheet-id').value,sheetUrl:document.getElementById('s-sheet-url').value,pdfVisiting:(document.getElementById('s-pdf-visiting')||{}).value||'',pdfAnnual:(document.getElementById('s-pdf-annual')||{}).value||''};
+  settings={waAdmin:(document.getElementById('s-wa-admin')||{}).value||'',waOps:document.getElementById('s-wa-ops').value,waAccounts:document.getElementById('s-wa-accounts').value,waHospitality:document.getElementById('s-wa-hospitality').value,waTransport:(document.getElementById('s-wa-transport')||{}).value||'',emailAdmin:(document.getElementById('s-email-admin')||{}).value||'',emailOps:(document.getElementById('s-email-ops')||{}).value||'',emailAccounts:(document.getElementById('s-email-accounts')||{}).value||'',emailHospitality:(document.getElementById('s-email-hospitality')||{}).value||'',emailjsKey:document.getElementById('s-emailjs-key').value,emailjsService:document.getElementById('s-emailjs-service').value,emailjsTemplate:document.getElementById('s-emailjs-template').value,sheetId:document.getElementById('s-sheet-id').value,sheetUrl:document.getElementById('s-sheet-url').value,pdfVisiting:(document.getElementById('s-pdf-visiting')||{}).value||'',pdfAnnual:(document.getElementById('s-pdf-annual')||{}).value||''};
   initEmailJS();
   localStorage.setItem('golf_settings_v2',JSON.stringify(settings));
   const el=document.getElementById('settings-saved');el.style.display='inline';setTimeout(()=>el.style.display='none',2500);
