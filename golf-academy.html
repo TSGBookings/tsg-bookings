@@ -1857,8 +1857,28 @@ function buildTravelMsg(f) {
 function sendTravelWA(id) {
   const b = bookings.find(x => x.id === id);
   if (!b) return;
+  // Read live values from inline Travel Details inputs if modal is open
+  const tName    = document.getElementById('vtd-trav-name-'+id);
+  const tContact = document.getElementById('vtd-trav-contact-'+id);
+  const tFlight  = document.getElementById('vtd-flight-no-'+id);
+  const tTime    = document.getElementById('vtd-flight-time-'+id);
+  const tTerminal= document.getElementById('vtd-terminal-'+id);
+  const tStaff   = document.getElementById('vtd-staff-'+id);
+  // If the modal inputs exist, save their values to the booking first
+  if (tName || tFlight) {
+    if (tName)     b.travellerName    = tName.value    || b.travellerName    || '';
+    if (tContact)  b.travellerContact = tContact.value || b.travellerContact || '';
+    if (tFlight)   b.flightNo         = tFlight.value  || b.flightNo         || '';
+    if (tTime)     b.flightArrivalTime= tTime.value    || b.flightArrivalTime|| '';
+    if (tTerminal) b.terminal         = tTerminal.value|| b.terminal         || '';
+    if (tStaff)    b.accompanyingStaff= tStaff.value   || b.accompanyingStaff|| '';
+    saveState();
+    syncToSheets(b);
+  }
   const msg = buildTravelMsg(b);
-  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  const num = settings.waTransport || '';
+  const url = num ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
 }
 
 function saveTravelDetails(id) {
