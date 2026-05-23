@@ -1734,6 +1734,7 @@ function viewBooking(id) {
   const {opsMsg,accountsMsg,hospitalityMsg}=buildMessages(b);
   const inc=b.inclusions||[], hasHospitality=inc.includes('Food')||inc.includes('Stay');
   const isSingleSession=(b.programmeType||'').toLowerCase().includes('single session');
+  const isAnnual=(b.programmeType||'').toLowerCase().includes('annual');
   const {base,misc,netFee,preGst,gst,discount,total,gstOn,discOn}=calcInvoice(b);
   // Store tcMsg globally so onclick handlers can access it safely without string-escaping issues
   window._tcBookingId = b.id;
@@ -1840,6 +1841,7 @@ function sendTCEmail(studentName, bookingId) {
   const b = bookings.find(x => x.id === bookingId);
   const pdfLink = (document.getElementById('tc-pdf-select')||{}).value || '';
   const msg = b ? buildThingsToCarryMsg(b, pdfLink) : (window._tcMsg || '');
+  alert('DEBUG — pdfLink: ' + (pdfLink||'(empty)') + '\n\nMessage preview:\n' + msg.substring(0, 300));
   sendEmailMsg('parent', encodeURIComponent(msg), 'Things to Carry — ' + studentName, b);
 }
 
