@@ -1407,6 +1407,7 @@ async function loadFromSheet() {
     const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id));
     // data.bookings already includes sheet-stored drafts (isDraft:true rows from sheet)
     bookings = [...data.bookings, ...localDrafts];
+    applyInvoiceCorrections();
     // Save clean sheet data to localStorage
     localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
     renderDashboard();
