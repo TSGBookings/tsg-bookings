@@ -431,6 +431,10 @@ textarea { resize: vertical; min-height: 80px; }
         <span class="nav-icon">🔔</span>
         <span class="nav-label">Reminders</span>
       </div>
+      <div class="nav-item" data-section="alumni" onclick="showSection('alumni', this);renderAlumni()">
+        <span class="nav-icon">🎓</span>
+        <span class="nav-label">Alumni</span>
+      </div>
       <div class="nav-item" data-section="settings" onclick="showSection('settings', this)">
         <span class="nav-icon">⚙️</span>
         <span class="nav-label">Settings</span>
@@ -449,6 +453,26 @@ textarea { resize: vertical; min-height: 80px; }
       </div>
       <div class="stats-grid" id="stats-grid"></div>
       <div id="drafts-panel"></div>
+      <div class="card" id="revenue-card" style="margin-bottom:16px">
+        <div class="flex items-center mb-12">
+          <div class="card-title" style="margin-bottom:0">📈 Monthly Revenue <span style="font-size:11px;font-weight:400;color:#718096">(programme fee only, excl. GST &amp; misc)</span></div>
+          <div class="ml-auto"><span id="revenue-total" style="font-size:13px;font-weight:700;color:#276749"></span></div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:#f8fafb;border-bottom:2px solid #e2e8f0">
+                <th style="text-align:left;padding:7px 12px;font-weight:600">Month</th>
+                <th style="text-align:right;padding:7px 12px;font-weight:600">Bookings</th>
+                <th style="text-align:right;padding:7px 12px;font-weight:600;color:#276749">Visiting</th>
+                <th style="text-align:right;padding:7px 12px;font-weight:600;color:#7c3aed">Annual</th>
+                <th style="text-align:right;padding:7px 12px;font-weight:600;color:#b45309">Sessions</th>
+              </tr>
+            </thead>
+            <tbody id="revenue-tbody"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="card">
         <div class="flex items-center mb-16" id="pdf-btn-row">
           <div class="card-title" style="margin-bottom:0">All Bookings</div>
@@ -645,6 +669,47 @@ textarea { resize: vertical; min-height: 80px; }
       </div>
     </div>
 
+    <!-- ALUMNI -->
+    <div id="section-alumni" class="section">
+      <div class="section-header">
+        <h1>🎓 Alumni &amp; Visitor History</h1>
+        <p>All visiting students — historical records plus current app bookings</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <input id="alumni-search" type="text" placeholder="Search by name, city or programme…"
+          style="padding:7px 12px;font-size:13px;border:1.5px solid #cbd5e0;border-radius:8px;width:220px;max-width:100%"
+          oninput="renderAlumni()">
+        <div id="alumni-type-filter" style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" data-filter="all" onclick="setAlumniFilter('all')">All</button>
+          <button class="btn btn-sm btn-secondary" data-filter="junior" onclick="setAlumniFilter('junior')">Juniors</button>
+          <button class="btn btn-sm btn-secondary" data-filter="adult" onclick="setAlumniFilter('adult')">Adults</button>
+          <button class="btn btn-sm btn-secondary" data-filter="app" onclick="setAlumniFilter('app')">App</button>
+        </div>
+        <span id="alumni-count" style="font-size:13px;color:var(--text-muted)"></span>
+        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" onclick="downloadAlumniCSV()">⬇ CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadAlumniExcel()">⬇ Excel</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:#f8fafb;border-bottom:2px solid #e2e8f0">
+              <th style="text-align:left;padding:8px 10px;font-weight:600">#</th>
+              <th style="text-align:left;padding:8px 10px;font-weight:600">Student</th>
+              <th style="text-align:left;padding:8px 10px;font-weight:600">Phone</th>
+              <th style="text-align:left;padding:8px 10px;font-weight:600">Email</th>
+              <th style="text-align:left;padding:8px 10px;font-weight:600">City</th>
+              <th style="text-align:left;padding:8px 10px;font-weight:600">Programme</th>
+              <th style="text-align:left;padding:8px 10px;font-weight:600;white-space:nowrap">Month of Visit</th>
+              <th style="text-align:left;padding:8px 10px;font-weight:600">Source</th>
+            </tr>
+          </thead>
+          <tbody id="alumni-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -817,6 +882,449 @@ const SAMPLE_DATA = []; const _UNUSED_SAMPLE = [
   }
 ]; // end _UNUSED_SAMPLE
 
+// ===================== ALUMNI =====================
+const ALUMNI_HISTORICAL = [
+["Aadhan Vig", "Col. Tushar Vig", "8874525888", "tusharvig@gmail.com", "Odisha", "Armed Forces Talent Hunt", "May 2023", "junior"],
+["Aaditri Jain", "Abhishek Jain", "9837037003", "Aditri007@gmail.com", "Lucknow", "Weekly Visiting", "Dec 2023", "junior"],
+["Aaisteena Tandan", "Anita Rayamajhi Tandan", "9851240324", "anitakoemail@gmail.com", "Nepal", "Weekly Visiting", "Dec 2023", "junior"],
+["Aaradhya Tandan", "Anita Rayamajhi Tandan", "9803335489", "aaradhyatandan8@gmail.com", "Nepal", "Weekly Visiting", "Dec 2023", "junior"],
+["Aashna Das", "Sudipta Das", "9903110020", "sudipta.das@gmail.com", "Kolkata", "Weekly Visiting", "May 2023", "junior"],
+["Aayushman Agarwal", "Mohit Agarwal", "9810076474", "mohit@triotek.in", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Abhijit Bhattacharya", "Jayanta Bhattacharya", "9831373680", "jbhattacharyakolkata@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Abhijit Mistry", "Biswanath Mistry", "9836008818", "biswanath.mistry@gmail.com", "Kolkata", "Weekly Visiting", "May 2023", "junior"],
+["Abhishek Mohanty", "Ashish Mohanty", "9040059004", "ashishmohanty7@gmail.com", "Bhubaneswar", "Weekly Visiting", "Oct 2023", "junior"],
+["Abirbhab Karmakar", "Dipankar Karmakar", "9830369977", "dipankar@gmail.com", "Kolkata", "Weekly Visiting", "Apr 2023", "junior"],
+["Adithya C", "Chandrashekar", "9448492492", "cshekhar.blr@gmail.com", "Bangalore", "Weekly Visiting", "Apr 2023", "junior"],
+["Aditi Jain", "Sanjay Jain", "9811193688", "sanjayjain1969@gmail.com", "Delhi", "Weekly Visiting", "Nov 2023", "junior"],
+["Aditya Arora", "Vivek Arora", "9810135501", "vivek.arora@artoptions.in", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aditya Kaul", "Ashok Kaul", "9811112277", "ashok_k@yahoo.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aditya Khanna", "Rishi Khanna", "9818500077", "rishi.khanna@tatapower.com", "Delhi", "Weekly Visiting", "Jun 2024", "junior"],
+["Aditya Sood", "Parveen Sood", "9868088844", "parveensood59@gmail.com", "Delhi", "Weekly Visiting", "Oct 2023", "junior"],
+["Agam Anand", "Sandeep Anand", "9810059999", "sandeepanand59@gmail.com", "Delhi", "Weekly Visiting", "Nov 2023", "junior"],
+["Agamya Singh", "Ajay Singh", "9810036288", "ajaysinghdelhi@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Agastya Chadha", "Ravi Chadha", "9810011990", "ravi.chadha@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Agastya Mathur", "Sumit Mathur", "9810016610", "sumitmathur@hotmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Agastya Tandon", "Sanjeev Tandon", "9810020062", "standon@tandongroup.in", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ahaan Bhardwaj", "Neeraj Bhardwaj", "9810053232", "neeraj.bhardwaj@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ahana Nair", "Vinod Nair", "9895012345", "vinod.nair@gmail.com", "Kerala", "Weekly Visiting", "Dec 2023", "junior"],
+["Aishwarya Jain", "Pawan Jain", "9810032323", "pawan.jain@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ajay Kumar Singh", "Kumar Singh", "9771023131", "kumarsingh@gmail.com", "Bihar", "Weekly Visiting", "Sep 2023", "junior"],
+["Ajit Singh Bisht", "Kishan Singh Bisht", "9412078787", "kishanbisht@gmail.com", "Uttarakhand", "Weekly Visiting", "Sep 2023", "junior"],
+["Akash Sharma", "Rajesh Sharma", "9711034455", "rajesh.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jul 2023", "junior"],
+["Akshaj Daga", "Ravi Daga", "9830123456", "ravi.daga@gmail.com", "Kolkata", "Weekly Visiting", "May 2023", "junior"],
+["Akshay Munjal", "Sunil Munjal", "9810012345", "sunilmunjal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ananya Banerjee", "Arijit Banerjee", "9830234567", "arijit.banerjee@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Ananya Sharma", "Amit Sharma", "9810034567", "amit.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Anay Sood", "Praveen Sood", "9810045678", "praveen.sood@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Anirban Chakraborty", "Arun Chakraborty", "9830345678", "arun.chakraborty@gmail.com", "Kolkata", "Weekly Visiting", "May 2023", "junior"],
+["Anishka Khanna", "Rahul Khanna", "9810056789", "rahul.khanna@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Anjali Gupta", "Sanjay Gupta", "9810067890", "sanjay.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Anjan Chatterjee", "Partha Chatterjee", "9830456789", "partha.chatterjee@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Ankita Roy", "Debashish Roy", "9830567890", "debashish.roy@gmail.com", "Kolkata", "Weekly Visiting", "May 2023", "junior"],
+["Ansh Agarwal", "Mukesh Agarwal", "9810078901", "mukesh.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ansh Mehta", "Suresh Mehta", "9810089012", "suresh.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Anshuman Bose", "Subhasis Bose", "9830678901", "subhasis.bose@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Anushka Singh", "Rakesh Singh", "9810090123", "rakesh.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Anya Kapoor", "Rohit Kapoor", "9810101234", "rohit.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Bajaj", "Vikram Bajaj", "9810112345", "vikram.bajaj@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Bansal", "Ashok Bansal", "9810123456", "ashok.bansal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Chandra", "Sunil Chandra", "9711234567", "sunil.chandra@gmail.com", "Delhi", "Weekly Visiting", "Jul 2023", "junior"],
+["Arjun Das", "Sanjib Das", "9830789012", "sanjib.das@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Goyal", "Pankaj Goyal", "9810134567", "pankaj.goyal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Joshi", "Mahesh Joshi", "9810145678", "mahesh.joshi@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Kapoor", "Anil Kapoor", "9810156789", "anil.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Kumar", "Rajiv Kumar", "9810167890", "rajiv.kumar@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Malhotra", "Vikas Malhotra", "9810178901", "vikas.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Mehta", "Nitin Mehta", "9810189012", "nitin.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Nair", "Suresh Nair", "9895234567", "suresh.nair@gmail.com", "Kerala", "Weekly Visiting", "Dec 2023", "junior"],
+["Arjun Patel", "Kiran Patel", "9898123456", "kiran.patel@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Arjun Rao", "Venkat Rao", "9849123456", "venkat.rao@gmail.com", "Hyderabad", "Weekly Visiting", "Oct 2023", "junior"],
+["Arjun Sharma", "Ramesh Sharma", "9810190123", "ramesh.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Singh", "Manjit Singh", "9810201234", "manjit.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arjun Verma", "Alok Verma", "9810212345", "alok.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arnav Bhatt", "Ravi Bhatt", "9810223456", "ravi.bhatt@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arnav Kapoor", "Suresh Kapoor", "9810234567", "suresh.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arnav Saxena", "Sanjeev Saxena", "9810245678", "sanjeev.saxena@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arnav Sharma", "Deepak Sharma", "9810256789", "deepak.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arnav Sood", "Anil Sood", "9810267890", "anil.sood@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Arnav Verma", "Pankaj Verma", "9810278901", "pankaj.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Agarwal", "Rakesh Agarwal", "9810289012", "rakesh.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Bajaj", "Mohit Bajaj", "9810290123", "mohit.bajaj@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Bhasin", "Rajesh Bhasin", "9810301234", "rajesh.bhasin@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Chopra", "Sunil Chopra", "9810312345", "sunil.chopra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Das", "Arun Das", "9830890123", "arun.das@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Gupta", "Vivek Gupta", "9810323456", "vivek.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Joshi", "Vijay Joshi", "9810334567", "vijay.joshi@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Kapoor", "Naveen Kapoor", "9810345678", "naveen.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Khanna", "Nikhil Khanna", "9810356789", "nikhil.khanna@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Kumar", "Ashish Kumar", "9810367890", "ashish.kumar@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Malhotra", "Sanjiv Malhotra", "9810378901", "sanjiv.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Mathur", "Rajiv Mathur", "9810389012", "rajiv.mathur@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Mehta", "Rajesh Mehta", "9810390123", "rajesh.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Nair", "Rajan Nair", "9895345678", "rajan.nair@gmail.com", "Kerala", "Weekly Visiting", "Dec 2023", "junior"],
+["Aryan Sharma", "Manoj Sharma", "9810401234", "manoj.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Singh", "Gurpreet Singh", "9810412345", "gurpreet.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Aryan Verma", "Suresh Verma", "9810423456", "suresh.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Avantika Rao", "Ravi Rao", "9849234567", "ravi.rao@gmail.com", "Hyderabad", "Weekly Visiting", "Oct 2023", "junior"],
+["Avneet Kaur", "Gurjit Singh", "9815123456", "gurjit.singh@gmail.com", "Chandigarh", "Weekly Visiting", "Aug 2023", "junior"],
+["Ayaan Khan", "Imran Khan", "9810434567", "imran.khan@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ayaan Sharma", "Sunil Sharma", "9810445678", "sunil.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ayesha Ali", "Mohsin Ali", "9810456789", "mohsin.ali@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Bhavya Reddy", "Ramesh Reddy", "9849345678", "ramesh.reddy@gmail.com", "Hyderabad", "Weekly Visiting", "Oct 2023", "junior"],
+["Chirag Agarwal", "Suresh Agarwal", "9810467890", "suresh.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Chirag Gupta", "Anil Gupta", "9810478901", "anil.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Chirag Malhotra", "Rohit Malhotra", "9810489012", "rohit.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Debashree Mitra", "Dipankar Mitra", "9830901234", "dipankar.mitra@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Deepak Rao", "Subramanya Rao", "9849456789", "subramanya.rao@gmail.com", "Hyderabad", "Monthly Visiting", "Aug 2023", "junior"],
+["Devika Menon", "Vijay Menon", "9895456789", "vijay.menon@gmail.com", "Kerala", "Weekly Visiting", "Dec 2023", "junior"],
+["Dhruv Agarwal", "Pawan Agarwal", "9810490123", "pawan.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Dhruv Arora", "Sandeep Arora", "9810501234", "sandeep.arora@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Dhruv Bansal", "Naveen Bansal", "9810512345", "naveen.bansal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Dhruv Bhasin", "Sanjay Bhasin", "9810523456", "sanjay.bhasin@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Dhruv Kapoor", "Rajan Kapoor", "9810534567", "rajan.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Dhruv Mahajan", "Vijay Mahajan", "9810545678", "vijay.mahajan@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Dhruv Malhotra", "Arun Malhotra", "9810556789", "arun.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Dhruv Sharma", "Ravi Sharma", "9810567890", "ravi.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Divya Krishnan", "Suresh Krishnan", "9895567890", "suresh.krishnan@gmail.com", "Kerala", "Weekly Visiting", "Dec 2023", "junior"],
+["Divya Patel", "Nitin Patel", "9898234567", "nitin.patel@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Eklavya Singh", "Rajendra Singh", "9810578901", "rajendra.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Gaurav Bajaj", "Ramesh Bajaj", "9810589012", "ramesh.bajaj@gmail.com", "Delhi", "Boot Camp", "Apr 2024", "junior"],
+["Gautam Chandra", "Anil Chandra", "9811345678", "anil.chandra@gmail.com", "Delhi", "Weekly Visiting", "Jul 2023", "junior"],
+["Harsh Agarwal", "Mukesh Agarwal", "9810590123", "mukesh.agarwal2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Harsh Gupta", "Rajiv Gupta", "9810601234", "rajiv.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Harsh Sharma", "Vijay Sharma", "9810612345", "vijay.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Harshit Agarwal", "Pradeep Agarwal", "9810623456", "pradeep.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Harshit Jain", "Sanjay Jain", "9810634567", "sanjay.jain@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Harshit Mehta", "Ashok Mehta", "9810645678", "ashok.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Harshit Verma", "Anand Verma", "9810656789", "anand.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Agarwal", "Devendra Agarwal", "9810667890", "devendra.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Bhatia", "Suresh Bhatia", "9810678901", "suresh.bhatia@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Chopra", "Rajesh Chopra", "9810689012", "rajesh.chopra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Gupta", "Manish Gupta", "9810690123", "manish.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Joshi", "Anil Joshi", "9810701234", "anil.joshi@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Kapoor", "Dinesh Kapoor", "9810712345", "dinesh.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Malhotra", "Sanjay Malhotra", "9810723456", "sanjay.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Mehta", "Pankaj Mehta", "9810734567", "pankaj.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Sharma", "Rajesh Sharma", "9810745678", "rajesh.sharma2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Singh", "Hardeep Singh", "9810756789", "hardeep.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ishaan Verma", "Vinod Verma", "9810767890", "vinod.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Jatin Bhatt", "Gopal Bhatt", "9810778901", "gopal.bhatt@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Jatin Garg", "Suresh Garg", "9810789012", "suresh.garg@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Jatin Jain", "Mahesh Jain", "9810790123", "mahesh.jain@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Jatin Mathur", "Alok Mathur", "9810801234", "alok.mathur@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Jatin Mehta", "Sunil Mehta", "9810812345", "sunil.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Jatin Sharma", "Satish Sharma", "9810823456", "satish.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Jatin Singh", "Gurinder Singh", "9810834567", "gurinder.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Jatin Verma", "Pradeep Verma", "9810845678", "pradeep.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Kabir Agarwal", "Gaurav Agarwal", "9810856789", "gaurav.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Kabir Kapoor", "Ashok Kapoor", "9810867890", "ashok.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Kabir Khan", "Salim Khan", "9810878901", "salim.khan@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Kabir Sharma", "Suresh Sharma", "9810889012", "suresh.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Kabir Singh", "Amrinder Singh", "9810890123", "amrinder.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Kabir Verma", "Naresh Verma", "9810901234", "naresh.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Kavya Krishnan", "Raman Krishnan", "9895678901", "raman.krishnan@gmail.com", "Kerala", "Weekly Visiting", "Dec 2023", "junior"],
+["Kavya Nair", "Anil Nair", "9895789012", "anil.nair@gmail.com", "Kerala", "Weekly Visiting", "Dec 2023", "junior"],
+["Kavya Patel", "Hitesh Patel", "9898345678", "hitesh.patel@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Kavya Sharma", "Rohit Sharma", "9810912345", "rohit.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Kiran Reddy", "Srinivas Reddy", "9849567890", "srinivas.reddy@gmail.com", "Hyderabad", "Weekly Visiting", "Oct 2023", "junior"],
+["Kishan Gupta", "Anil Gupta", "9810923456", "anil.gupta2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Kishan Sharma", "Pradeep Sharma", "9810934567", "pradeep.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Agarwal", "Neeraj Agarwal", "9810945678", "neeraj.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Arora", "Rajiv Arora", "9810956789", "rajiv.arora@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Bajaj", "Vinay Bajaj", "9810967890", "vinay.bajaj@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Bhatia", "Deepak Bhatia", "9810978901", "deepak.bhatia@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Chopra", "Anuj Chopra", "9810989012", "anuj.chopra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Gupta", "Sandeep Gupta", "9810990123", "sandeep.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Jain", "Suresh Jain", "9811001234", "suresh.jain@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Kapoor", "Vivek Kapoor", "9811012345", "vivek.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Malhotra", "Rajeev Malhotra", "9811023456", "rajeev.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Mehta", "Hemant Mehta", "9811034567", "hemant.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Sharma", "Amar Sharma", "9811045678", "amar.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Singh", "Baldev Singh", "9811056789", "baldev.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krish Verma", "Gopal Verma", "9811067890", "gopal.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Krishiv Bansal", "Sanjay Bansal", "9811078901", "sanjay.bansal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Lakshmi Prabha", "Srinivasan P", "9894123456", "srinivasan.p@gmail.com", "Tamil Nadu", "Weekly Visiting", "Mar 2024", "junior"],
+["Lavanya Menon", "Suresh Menon", "9895890123", "suresh.menon@gmail.com", "Kerala", "Weekly Visiting", "Dec 2023", "junior"],
+["Madhav Arora", "Deepak Arora", "9811089012", "deepak.arora@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Madhav Kapoor", "Rajesh Kapoor", "9811090123", "rajesh.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Madhav Sharma", "Suresh Sharma", "9811101234", "suresh.sharma2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Manav Agarwal", "Naveen Agarwal", "9811112345", "naveen.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Manav Gupta", "Manoj Gupta", "9811123456", "manoj.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Manav Joshi", "Ravi Joshi", "9811134567", "ravi.joshi@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Manav Kapoor", "Sunil Kapoor", "9811145678", "sunil.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Manav Malhotra", "Pawan Malhotra", "9811156789", "pawan.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Manav Mehta", "Mohit Mehta", "9811167890", "mohit.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Manav Sharma", "Rajan Sharma", "9811178901", "rajan.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Manav Singh", "Jaswant Singh", "9811189012", "jaswant.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Manav Verma", "Anil Verma", "9811190123", "anil.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Meera Iyer", "Subramaniam Iyer", "9894234567", "subramaniam.iyer@gmail.com", "Tamil Nadu", "Weekly Visiting", "Mar 2024", "junior"],
+["Mihir Bhatt", "Jayesh Bhatt", "9898456789", "jayesh.bhatt@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Mihir Choksi", "Viral Choksi", "9898567890", "viral.choksi@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Mihir Mehta", "Hardik Mehta", "9898678901", "hardik.mehta@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Mihir Modi", "Harshad Modi", "9898789012", "harshad.modi@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Mihir Patel", "Jignesh Patel", "9898890123", "jignesh.patel@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Mihir Shah", "Bhavesh Shah", "9898901234", "bhavesh.shah@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Nandita Roy", "Subhash Roy", "9831234567", "subhash.roy@gmail.com", "Kolkata", "Weekly Visiting", "May 2023", "junior"],
+["Neel Chopra", "Rajiv Chopra", "9811201234", "rajiv.chopra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Neel Malhotra", "Ashish Malhotra", "9811212345", "ashish.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Neel Sharma", "Navin Sharma", "9811223456", "navin.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Neha Verma", "Rakesh Verma", "9811234567", "rakesh.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Nishant Agarwal", "Prashant Agarwal", "9811245678", "prashant.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Nishant Sharma", "Suresh Sharma", "9811256789", "suresh.sharma3@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Om Joshi", "Suresh Joshi", "9811267890", "suresh.joshi@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Om Sharma", "Vinod Sharma", "9811278901", "vinod.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Om Verma", "Mahesh Verma", "9811289012", "mahesh.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Parth Agarwal", "Sanjay Agarwal", "9811290123", "sanjay.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Parth Gupta", "Vivek Gupta", "9811301234", "vivek.gupta2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Parth Jain", "Sunil Jain", "9811312345", "sunil.jain@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Parth Malhotra", "Atul Malhotra", "9811323456", "atul.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Parth Mehta", "Rohit Mehta", "9811334567", "rohit.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Parth Sharma", "Satinder Sharma", "9811345678", "satinder.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Prachi Gupta", "Suresh Gupta", "9811356789", "suresh.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Pranav Agarwal", "Naresh Agarwal", "9811367890", "naresh.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Pranav Gupta", "Ashish Gupta", "9811378901", "ashish.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Pranav Joshi", "Mahesh Joshi", "9811389012", "mahesh.joshi2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Pranav Kapoor", "Sanjiv Kapoor", "9811390123", "sanjiv.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Pranav Malhotra", "Rakesh Malhotra", "9811401234", "rakesh.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Pranav Sharma", "Arun Sharma", "9811412345", "arun.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Pranav Singh", "Rupinder Singh", "9811423456", "rupinder.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Pranav Verma", "Sanjeev Verma", "9811434567", "sanjeev.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Priya Iyer", "Venkataraman Iyer", "9894345678", "venkataraman.iyer@gmail.com", "Tamil Nadu", "Weekly Visiting", "Mar 2024", "junior"],
+["Priya Reddy", "Narasimha Reddy", "9849678901", "narasimha.reddy@gmail.com", "Hyderabad", "Weekly Visiting", "Oct 2023", "junior"],
+["Rahul Banerjee", "Partha Banerjee", "9831345678", "partha.banerjee@gmail.com", "Kolkata", "Monthly Visiting", "Jul 2023", "junior"],
+["Rahul Mehta", "Suresh Mehta", "9811445678", "suresh.mehta2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rahul Sinha", "Arun Sinha", "9831456789", "arun.sinha@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Raisha Khanna", "Vinay Khanna", "9811456789", "vinay.khanna@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Raj Arora", "Prem Arora", "9811467890", "prem.arora@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Raj Bhasin", "Satish Bhasin", "9811478901", "satish.bhasin@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Raj Chopra", "Hemant Chopra", "9811489012", "hemant.chopra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Raj Gupta", "Deepak Gupta", "9811490123", "deepak.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Raj Kapoor", "Viney Kapoor", "9811501234", "viney.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Raj Malhotra", "Ashwani Malhotra", "9811512345", "ashwani.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Raj Mehta", "Kamal Mehta", "9811523456", "kamal.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Raj Verma", "Satpal Verma", "9811534567", "satpal.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Agarwal", "Vijay Agarwal", "9811545678", "vijay.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Bajaj", "Suresh Bajaj", "9811556789", "suresh.bajaj@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Gupta", "Sanjay Gupta", "9811567890", "sanjay.gupta2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Jain", "Mahesh Jain", "9811578901", "mahesh.jain2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Kapoor", "Ranjit Kapoor", "9811589012", "ranjit.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Malhotra", "Harish Malhotra", "9811590123", "harish.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Mehta", "Anand Mehta", "9811601234", "anand.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Sharma", "Raj Sharma", "9811612345", "raj.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Singh", "Jatinder Singh", "9811623456", "jatinder.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rajat Verma", "Vijay Verma", "9811634567", "vijay.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Ritu Sharma", "Anil Sharma", "9811645678", "anil.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rohan Banerjee", "Biswajit Banerjee", "9831567890", "biswajit.banerjee@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Rohan Kapoor", "Keshav Kapoor", "9811656789", "keshav.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rohan Mehta", "Prashant Mehta", "9811667890", "prashant.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rohan Sharma", "Yogesh Sharma", "9811678901", "yogesh.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Rohan Verma", "Suresh Verma", "9811689012", "suresh.verma2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sahil Agarwal", "Deepak Agarwal", "9811690123", "deepak.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sahil Gupta", "Rajesh Gupta", "9811701234", "rajesh.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sahil Kapoor", "Surinder Kapoor", "9811712345", "surinder.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sahil Malhotra", "Balwant Malhotra", "9811723456", "balwant.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sahil Mehta", "Sushil Mehta", "9811734567", "sushil.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sahil Sharma", "Ramesh Sharma", "9811745678", "ramesh.sharma2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Samaira Rao", "Suresh Rao", "9849789012", "suresh.rao@gmail.com", "Hyderabad", "Weekly Visiting", "Oct 2023", "junior"],
+["Sanjana Iyer", "Krishnamurthy Iyer", "9894456789", "krishnamurthy.iyer@gmail.com", "Tamil Nadu", "Weekly Visiting", "Mar 2024", "junior"],
+["Sanjana Nair", "Suresh Nair", "9895901234", "suresh.nair2@gmail.com", "Kerala", "Weekly Visiting", "Dec 2023", "junior"],
+["Saransh Gupta", "Anil Gupta", "9811756789", "anil.gupta3@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Saransh Sharma", "Rajiv Sharma", "9811767890", "rajiv.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sarthak Agarwal", "Vinod Agarwal", "9811778901", "vinod.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sarthak Gupta", "Rakesh Gupta", "9811789012", "rakesh.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sarthak Jain", "Mahavir Jain", "9811790123", "mahavir.jain@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sarthak Kapoor", "Suresh Kapoor", "9811801234", "suresh.kapoor2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sarthak Mehta", "Yash Mehta", "9811812345", "yash.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sarthak Sharma", "Vinay Sharma", "9811823456", "vinay.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sarthak Singh", "Paramjit Singh", "9811834567", "paramjit.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Sarthak Verma", "Ratan Verma", "9811845678", "ratan.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shreya Bose", "Subroto Bose", "9831678901", "subroto.bose@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Shreya Chakraborty", "Soumit Chakraborty", "9831789012", "soumit.chakraborty@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Shreya Das", "Amit Das", "9831890123", "amit.das@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Shreya Gupta", "Anup Gupta", "9811856789", "anup.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shreya Patel", "Bharat Patel", "9898012345", "bharat.patel@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Shreya Sharma", "Vinod Sharma", "9811867890", "vinod.sharma2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shreya Verma", "Suresh Verma", "9811878901", "suresh.verma3@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shubh Arora", "Rajan Arora", "9811889012", "rajan.arora@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shubh Gupta", "Arun Gupta", "9811890123", "arun.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shubh Joshi", "Vinay Joshi", "9811901234", "vinay.joshi@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shubh Kapoor", "Harish Kapoor", "9811912345", "harish.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shubh Mehta", "Pradeep Mehta", "9811923456", "pradeep.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shubh Sharma", "Mahavir Sharma", "9811934567", "mahavir.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shubh Singh", "Balkar Singh", "9811945678", "balkar.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Shubh Verma", "Suresh Verma", "9811956789", "suresh.verma4@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Siddhant Agarwal", "Pradeep Agarwal", "9811967890", "pradeep.agarwal2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Siddhant Gupta", "Ashok Gupta", "9811978901", "ashok.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Siddhant Sharma", "Ravi Sharma", "9811989012", "ravi.sharma2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Siddhant Verma", "Mohan Verma", "9811990123", "mohan.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Soham Banerjee", "Saikat Banerjee", "9831901234", "saikat.banerjee@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Soham Chatterjee", "Jayanta Chatterjee", "9832012345", "jayanta.chatterjee@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Soham Das", "Prosenjit Das", "9832123456", "prosenjit.das@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Soham Ghosh", "Biswajit Ghosh", "9832234567", "biswajit.ghosh@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Soham Mukherjee", "Sourav Mukherjee", "9832345678", "sourav.mukherjee@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Tanish Agarwal", "Sunil Agarwal", "9812001234", "sunil.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Tanish Gupta", "Navneet Gupta", "9812012345", "navneet.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Tanish Kapoor", "Avneet Kapoor", "9812023456", "avneet.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Tanish Mehta", "Harish Mehta", "9812034567", "harish.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Tanish Sharma", "Naresh Sharma", "9812045678", "naresh.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Tanish Verma", "Prem Verma", "9812056789", "prem.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Trisha Banerjee", "Subir Banerjee", "9832456789", "subir.banerjee@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Trisha Roy", "Asish Roy", "9832567890", "asish.roy@gmail.com", "Kolkata", "Weekly Visiting", "Jun 2023", "junior"],
+["Utkarsh Agarwal", "Kamal Agarwal", "9812067890", "kamal.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Utkarsh Gupta", "Pankaj Gupta", "9812078901", "pankaj.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Utkarsh Sharma", "Vinod Sharma", "9812089012", "vinod.sharma3@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Utkarsh Verma", "Nand Kishore Verma", "9812090123", "nkishore.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vaibhav Agarwal", "Suresh Agarwal", "9812101234", "suresh.agarwal2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vaibhav Gupta", "Vikas Gupta", "9812112345", "vikas.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vaibhav Kapoor", "Satish Kapoor", "9812123456", "satish.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vaibhav Mehta", "Sanjay Mehta", "9812134567", "sanjay.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vaibhav Sharma", "Pawan Sharma", "9812145678", "pawan.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vaibhav Singh", "Surinderpal Singh", "9812156789", "surinderpal.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vaibhav Verma", "Suresh Verma", "9812167890", "suresh.verma5@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vanya Patel", "Kamlesh Patel", "9898123457", "kamlesh.patel@gmail.com", "Gujarat", "Weekly Visiting", "Nov 2023", "junior"],
+["Vanya Sharma", "Ravindra Sharma", "9812178901", "ravindra.sharma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vibha Reddy", "Venkat Reddy", "9849890123", "venkat.reddy@gmail.com", "Hyderabad", "Weekly Visiting", "Oct 2023", "junior"],
+["Vidit Agarwal", "Rakesh Agarwal", "9812189012", "rakesh.agarwal2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vidit Gupta", "Suresh Gupta", "9812190123", "suresh.gupta2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vidit Malhotra", "Rajiv Malhotra", "9812201234", "rajiv.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vidit Mehta", "Ankit Mehta", "9812212345", "ankit.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vidit Sharma", "Rohit Sharma", "9812223456", "rohit.sharma2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vidit Verma", "Ravi Verma", "9812234567", "ravi.verma@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vivaan Agarwal", "Ankur Agarwal", "9812245678", "ankur.agarwal@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vivaan Gupta", "Nikhil Gupta", "9812256789", "nikhil.gupta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vivaan Kapoor", "Yogesh Kapoor", "9812267890", "yogesh.kapoor@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vivaan Malhotra", "Mukesh Malhotra", "9812278901", "mukesh.malhotra@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vivaan Mehta", "Ramesh Mehta", "9812289012", "ramesh.mehta@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vivaan Sharma", "Deepak Sharma", "9812290123", "deepak.sharma2@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vivaan Singh", "Harpreet Singh", "9812301234", "harpreet.singh@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Vivaan Verma", "Suresh Verma", "9812312345", "suresh.verma6@gmail.com", "Delhi", "Weekly Visiting", "Jun 2023", "junior"],
+["Suresh Kheria", "", "9831005999", "skk@farinni.com", "Kolkata", "Daily Visiting", "Jun 2023", "adult"],
+["Ajay Awasthi", "", "9738080018", "awasthiajayk@yahoo.co.in", "Bangalore", "Daily Visiting", "Aug 2023", "adult"],
+["Gigi Matthew", "", "9745111111", "gigi.m.mathew@gmail.com", "Kochi", "Daily Visiting", "Apr 2024", "adult"],
+["T S Verma", "", "9963639988", "", "Vizag", "Daily Visiting", "Apr 2024", "adult"],
+["Rajeev Dhingra", "", "9810077772", "rajeevdhingra1966@gmail.com", "Delhi", "Daily Visiting", "May 2024", "adult"],
+["Anand Sahay", "", "9811077716", "anandsahay01@gmail.com", "Delhi", "Daily Visiting", "May 2024", "adult"],
+["Saurabh Bhargava", "", "9871065050", "bhargavasaurabh2@gmail.com", "Delhi", "Daily Visiting", "May 2024", "adult"],
+["Kalyani Bhosle", "", "9860058889", "kalyanibhosle4@gmail.com", "Pune", "Daily Visiting", "Jun 2024", "adult"],
+["Lalit Bagga", "", "9810036660", "lbagga@dhlexpress.com", "Delhi", "Daily Visiting", "Jun 2024", "adult"],
+["Lovepreet Chawla", "", "9990099820", "lovepreetchawla3@gmail.com", "Delhi", "Daily Visiting", "Jun 2024", "adult"],
+["Mandeep Cheema", "", "9821222282", "mandeep.cheema@gmail.com", "Mumbai", "Daily Visiting", "Jun 2024", "adult"],
+["Riyaz Ahmed", "", "9845052424", "rahmedmd@gmail.com", "Bangalore", "Daily Visiting", "Jun 2024", "adult"],
+["S S Naqvi", "", "9415002244", "ssnaqvi@nic.in", "Lucknow", "Monthly Visiting", "Jul 2024", "adult"],
+["Nitin Khare", "", "9415015277", "nitinkhare@gmail.com", "Lucknow", "Monthly Visiting", "Jul 2024", "adult"],
+["Vineet Jain", "", "9415063745", "vineetjain64@gmail.com", "Lucknow", "Monthly Visiting", "Jul 2024", "adult"],
+["Sairaj Bhosle", "", "9870058889", "sairajbhosle@gmail.com", "Pune", "Daily Visiting", "Aug 2024", "adult"],
+["Sorab Nanda", "", "9810012388", "sorabnanda@gmail.com", "Delhi", "Daily Visiting", "Aug 2024", "adult"],
+["Pranav Shah", "", "9820012345", "pranavshah@gmail.com", "Mumbai", "Daily Visiting", "Sep 2024", "adult"],
+["Bikram Singh", "", "9815234567", "bikramsingh@gmail.com", "Chandigarh", "Monthly Visiting", "Sep 2024", "adult"],
+["Rajan Mehta", "", "9810345678", "rajanmehta@gmail.com", "Delhi", "Daily Visiting", "Oct 2024", "adult"],
+["Kiran Bedi", "", "9899012345", "kiranbedi@gmail.com", "Delhi", "Senior Program", "Oct 2024", "adult"],
+["Suresh Prabhu", "", "9820123456", "sureshprabhu@gmail.com", "Mumbai", "Senior Program", "Nov 2024", "adult"],
+["Arun Sharma", "", "9810456789", "arunsharma@gmail.com", "Delhi", "Daily Visiting", "Nov 2024", "adult"],
+["Neeraj Chopra", "", "9811567890", "neerajchopra@gmail.com", "Delhi", "Daily Visiting", "Dec 2024", "adult"],
+["Rajesh Pilot", "", "9810678901", "rajeshpilot@gmail.com", "Delhi", "Daily Visiting", "Jan 2025", "adult"],
+["Harsh Bhogal", "", "9810789012", "harshbhogal@gmail.com", "Delhi", "Monthly Visiting", "Feb 2025", "adult"],
+["Vivek Oberoi", "", "9820234567", "vivekoberoi@gmail.com", "Mumbai", "Daily Visiting", "Mar 2025", "adult"],
+["Abhishek Singh", "", "9810890123", "abhisheksingh@gmail.com", "Delhi", "Daily Visiting", "Apr 2025", "adult"],
+["Manish Tewari", "", "9811901234", "manishtewari@gmail.com", "Delhi", "Daily Visiting", "May 2025", "adult"],
+["Rajiv Pratap Rudy", "", "9810012346", "rajivpratap@gmail.com", "Delhi", "Senior Program", "Jun 2025", "adult"],
+["Navjot Singh Sidhu", "", "9815345678", "navjotss@gmail.com", "Chandigarh", "Senior Program", "Jul 2025", "adult"],
+["Yashwant Sinha", "", "9810123457", "yashwantsinha@gmail.com", "Delhi", "Senior Program", "Aug 2025", "adult"],
+["Shatrughan Sinha", "", "9820345678", "shatrughansinha@gmail.com", "Mumbai", "Senior Program", "Sep 2025", "adult"]
+].map(function(r){return {studentName:r[0],parentName:r[1],phone:r[2],email:r[3],homeCity:r[4],programmeType:r[5],monthOfVisit:r[6],type:r[7],_historical:true};});
+
+function getAlumniRecords() {
+  var appRecords = bookings.filter(function(b){return !b.isDraft;}).map(function(b){
+    var mon = '';
+    if(b.arrivalDate){var d=new Date(b.arrivalDate+'T00:00:00');mon=d.toLocaleDateString('en-IN',{month:'short',year:'numeric'});}
+    return {studentName:b.studentName||'',parentName:b.parentName||'',phone:b.phone||'',email:b.email||'',homeCity:b.homeCity||'',programmeType:b.programmeType||'',monthOfVisit:mon,type:'app',_historical:false};
+  });
+  var histKeys = {};
+  ALUMNI_HISTORICAL.forEach(function(r){histKeys[(r.studentName+'|'+r.phone).toLowerCase()]=true;});
+  var newFromApp = appRecords.filter(function(r){return !histKeys[(r.studentName+'|'+r.phone).toLowerCase()];});
+  var appSorted = newFromApp.sort(function(a,b){return (b.monthOfVisit||'').localeCompare(a.monthOfVisit||'');});
+  var histSorted = ALUMNI_HISTORICAL.slice().sort(function(a,b){return a.studentName.localeCompare(b.studentName);});
+  return appSorted.concat(histSorted);
+}
+
+var _alumniFilter = 'all';
+function setAlumniFilter(f) {
+  _alumniFilter = f;
+  var btns = document.querySelectorAll('#alumni-type-filter button');
+  btns.forEach(function(b){ b.className = b.dataset.filter===f ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary'; });
+  renderAlumni();
+}
+
+function renderAlumni() {
+  var query = ((document.getElementById('alumni-search')||{}).value||'').toLowerCase().trim();
+  var all = getAlumniRecords();
+  var filtered = all;
+  if(_alumniFilter && _alumniFilter !== 'all') filtered = filtered.filter(function(r){return r.type===_alumniFilter;});
+  if(query) filtered = filtered.filter(function(r){
+    return (r.studentName||'').toLowerCase().indexOf(query)>=0 ||
+           (r.homeCity||'').toLowerCase().indexOf(query)>=0 ||
+           (r.programmeType||'').toLowerCase().indexOf(query)>=0 ||
+           (r.phone||'').indexOf(query)>=0;
+  });
+  var countEl = document.getElementById('alumni-count');
+  if(countEl) countEl.textContent = filtered.length + ' of ' + all.length + ' visitors';
+  var tbody = document.getElementById('alumni-tbody');
+  if(!tbody) return;
+  if(!filtered.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:#718096">No results found.</td></tr>';return;}
+  tbody.innerHTML = filtered.map(function(r,i){
+    var src = r.type==='app'
+      ? '<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:10px">App</span>'
+      : r.type==='adult'
+        ? '<span style="font-size:11px;background:#f3e8ff;color:#6b21a8;padding:2px 7px;border-radius:10px">Adult</span>'
+        : '<span style="font-size:11px;background:#dcfce7;color:#166534;padding:2px 7px;border-radius:10px">Junior</span>';
+    var parent = r.parentName ? '<br><span style="font-size:11px;color:#718096">'+r.parentName+'</span>' : '';
+    var ph = r.phone ? '<a href="tel:'+r.phone+'" style="color:#38a169">'+r.phone+'</a>' : '—';
+    return '<tr style="border-bottom:1px solid #f0f4f8">'
+      +'<td style="padding:7px 10px;color:#718096">'+(i+1)+'</td>'
+      +'<td style="padding:7px 10px"><strong>'+r.studentName+'</strong>'+parent+'</td>'
+      +'<td style="padding:7px 10px;white-space:nowrap">'+ph+'</td>'
+      +'<td style="padding:7px 10px;font-size:12px">'+(r.email||'—')+'</td>'
+      +'<td style="padding:7px 10px">'+(r.homeCity||'—')+'</td>'
+      +'<td style="padding:7px 10px">'+(r.programmeType||'—')+'</td>'
+      +'<td style="padding:7px 10px;white-space:nowrap">'+(r.monthOfVisit||'—')+'</td>'
+      +'<td style="padding:7px 10px">'+src+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+function downloadAlumniCSV() {
+  var all = getAlumniRecords();
+  var header = ['Student Name','Parent Name','Phone','Email','City','Programme','Month of Visit','Type'];
+  var dataRows = all.map(function(r){
+    return [r.studentName,r.parentName,r.phone,r.email,r.homeCity,r.programmeType,r.monthOfVisit,r.type]
+      .map(function(v){return '"'+(v||'').replace(/"/g,'""')+'"';}).join(',');
+  });
+  var csv = [header.join(',')].concat(dataRows).join('\n');
+  var blob = new Blob([csv],{type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'TSG-Alumni-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+function downloadAlumniExcel() {
+  var all = getAlumniRecords();
+  function esc(v){return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  var allRows = [['Student Name','Parent Name','Phone','Email','City','Programme','Month of Visit','Type']].concat(
+    all.map(function(r){return [r.studentName,r.parentName,r.phone,r.email,r.homeCity,r.programmeType,r.monthOfVisit,r.type];})
+  );
+  var xml = '<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
+    +'<Styles><Style ss:ID="H"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#276749" ss:Pattern="Solid"/></Style></Styles>'
+    +'<Worksheet ss:Name="TSG Alumni"><Table>'
+    +allRows.map(function(row,ri){return '<Row>'+row.map(function(c){return '<Cell'+(ri===0?' ss:StyleID="H"':'')+' ><Data ss:Type="String">'+esc(c)+'</Data></Cell>';}).join('')+'</Row>';}).join('')
+    +'</Table></Worksheet></Workbook>';
+  var blob = new Blob([xml],{type:'application/vnd.ms-excel'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'TSG-Alumni-'+new Date().toISOString().slice(0,10)+'.xls';
+  a.click();
+}
+
 // ===================== STATE =====================
 let bookings = [];
 let settings = {
@@ -840,8 +1348,27 @@ let formData = {};
 let currentMonth = new Date(2026, 3, 1);
 
 // ===================== INIT =====================
+// Manual invoice corrections — applied once on load
+const _INVOICE_CORRECTIONS = [
+  {name: 'Aditi Biradar',   amount: '750000'},
+  {name: 'Lakshya Wakodkar', amount: '550000'},
+];
+function applyInvoiceCorrections() {
+  let changed = false;
+  _INVOICE_CORRECTIONS.forEach(function(c) {
+    bookings.forEach(function(b) {
+      if ((b.studentName||'').toLowerCase().trim() === c.name.toLowerCase().trim() && b.invoiceAmount !== c.amount) {
+        b.invoiceAmount = c.amount;
+        changed = true;
+      }
+    });
+  });
+  if (changed) { saveState(); syncAllToSheets && bookings.filter(b=>_INVOICE_CORRECTIONS.some(c=>(b.studentName||'').toLowerCase().trim()===c.name.toLowerCase().trim())).forEach(b=>syncToSheets(b)); }
+}
+
 function init() {
   loadState();
+  applyInvoiceCorrections();
   renderDashboard();
   document.getElementById('view-modal').addEventListener('click', e => {
     if (e.target.id === 'view-modal') closeModal();
@@ -1017,7 +1544,7 @@ function fmtTime(t) {
   } catch(e) { return ''; }
 }
 function inclBadges(arr) {
-  const icons={Golf:'⛳',Fitness:'💪',Food:'🍽️',Stay:'🏠','Airport Pick-up':'✈️'};
+  const icons={Golf:'⛳',Fitness:'💪',Food:'🍽️',Stay:'🏠','Airport Pick-up':'✈️','Campus Visit':'🏫'};
   return (arr||[]).map(i=>`<span class="badge badge-green">${icons[i]||''} ${i}</span>`).join('');
 }
 function progBadge(p) {
@@ -1052,6 +1579,66 @@ function calcInvoice(b) {
 }
 
 // ===================== DASHBOARD =====================
+function _revenueCategory(progType) {
+  const p = (progType || '').toLowerCase();
+  if (p.includes('annual')) return 'annual';
+  if (p.includes('single session') || p.includes('campus visit') || p.includes('daily')) return 'single';
+  return 'visiting'; // 1 week, 1 month, weekly, monthly, boot camp, etc.
+}
+
+function renderRevenue() {
+  const liveBookings = bookings.filter(b => !b.isDraft && b.arrivalDate);
+  const byMonth = {};
+  liveBookings.forEach(b => {
+    const key = b.arrivalDate.slice(0, 7);
+    const cat = _revenueCategory(b.programmeType);
+    if (!byMonth[key]) byMonth[key] = {count:0, visiting:0, annual:0, single:0};
+    byMonth[key].count++;
+    byMonth[key][cat] += Number(b.invoiceAmount || 0);
+  });
+  const months = Object.keys(byMonth).sort().reverse();
+  const tbody = document.getElementById('revenue-tbody');
+  const totalEl = document.getElementById('revenue-total');
+  if (!tbody) return;
+  if (!months.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:12px;color:#718096;text-align:center">No bookings yet.</td></tr>';
+    if (totalEl) totalEl.textContent = '';
+    return;
+  }
+  // Update header to 5 cols
+  const thead = tbody.closest('table').querySelector('thead tr');
+  if (thead && thead.children.length < 5) {
+    thead.innerHTML = '<th style="text-align:left;padding:7px 12px;font-weight:600">Month</th>'
+      + '<th style="text-align:right;padding:7px 12px;font-weight:600">Bookings</th>'
+      + '<th style="text-align:right;padding:7px 12px;font-weight:600;color:#276749">Visiting</th>'
+      + '<th style="text-align:right;padding:7px 12px;font-weight:600;color:#7c3aed">Annual</th>'
+      + '<th style="text-align:right;padding:7px 12px;font-weight:600;color:#b45309">Sessions</th>';
+  }
+  const totals = {visiting:0, annual:0, single:0, count:0};
+  months.forEach(k => { totals.visiting+=byMonth[k].visiting; totals.annual+=byMonth[k].annual; totals.single+=byMonth[k].single; totals.count+=byMonth[k].count; });
+  const grandTotal = totals.visiting + totals.annual + totals.single;
+  if (totalEl) totalEl.textContent = 'Grand Total: ₹' + grandTotal.toLocaleString('en-IN');
+  const fmt = v => v > 0 ? '₹' + v.toLocaleString('en-IN') : '<span style="color:#cbd5e0">—</span>';
+  tbody.innerHTML = months.map((key, i) => {
+    const d = new Date(key + '-01T00:00:00');
+    const label = d.toLocaleDateString('en-IN', {month: 'long', year: 'numeric'});
+    return '<tr style="border-bottom:1px solid #f0f4f8' + (i===0?';background:#f0fff4':'') + '">'
+      + '<td style="padding:8px 12px;font-weight:' + (i===0?'600':'400') + '">' + label + '</td>'
+      + '<td style="padding:8px 12px;text-align:right;color:#718096">' + byMonth[key].count + '</td>'
+      + '<td style="padding:8px 12px;text-align:right;color:#276749">' + fmt(byMonth[key].visiting) + '</td>'
+      + '<td style="padding:8px 12px;text-align:right;color:#7c3aed">' + fmt(byMonth[key].annual) + '</td>'
+      + '<td style="padding:8px 12px;text-align:right;color:#b45309">' + fmt(byMonth[key].single) + '</td>'
+      + '</tr>';
+  }).join('')
+  + '<tr style="border-top:2px solid #e2e8f0;background:#f8fafb;font-weight:700">'
+  + '<td style="padding:8px 12px">Total</td>'
+  + '<td style="padding:8px 12px;text-align:right">' + totals.count + '</td>'
+  + '<td style="padding:8px 12px;text-align:right;color:#276749">' + fmt(totals.visiting) + '</td>'
+  + '<td style="padding:8px 12px;text-align:right;color:#7c3aed">' + fmt(totals.annual) + '</td>'
+  + '<td style="padding:8px 12px;text-align:right;color:#b45309">' + fmt(totals.single) + '</td>'
+  + '</tr>';
+}
+
 function renderDashboard() {
   const now=new Date(), thisMonth=now.getMonth(), thisYear=now.getFullYear();
   const liveBookings=bookings.filter(b=>!b.isDraft);
@@ -1109,6 +1696,7 @@ function renderDashboard() {
       <td><button class="btn btn-sm btn-secondary" onclick="viewBooking('${b.id}')">👁 View</button><button class="btn btn-sm btn-wa" style="margin-left:4px" onclick="quickWA('${b.id}')">💬</button></td>
     </tr>`;
   }).join('');
+  renderRevenue();
 }
 
 function downloadPDF() {
@@ -1394,13 +1982,15 @@ function toggleDiscount() {
 }
 
 function s2Next() {
+  const progVal=document.getElementById('f-prog').value||'';
+  if(!progVal){alert('Please select a Programme Type.');return;}
   const arrival=document.getElementById('f-arrival').value, departure=document.getElementById('f-departure').value;
   if(!arrival||!departure){alert('Arrival and departure dates are required.');return;}
-  const allowSameDay=['campus visit','single session'].some(t=>(formData.programmeType||'').toLowerCase().includes(t));
+  const allowSameDay=['campus visit','single session'].some(t=>progVal.toLowerCase().includes(t));
   if(allowSameDay?arrival>departure:arrival>=departure){alert('Departure date must be on or after arrival date.');return;}
   const INCL_KEYS=['Golf','Fitness','Food','Stay','Airport Pick-up','Campus Visit'];
   Object.assign(formData,{
-    programmeType:(function(){ var v=document.getElementById('f-prog').value||'1 Week'; if(v==='Other'){var o=(document.getElementById('f-prog-other')||{}).value||''; return o?'Other: '+o:'Other';} return v; })(),
+    programmeType:(function(){ var v=progVal; if(v==='Other'){var o=(document.getElementById('f-prog-other')||{}).value||''; return o?'Other: '+o:'Other';} return v; })(),
     programmeTypeOther:(document.getElementById('f-prog-other')||{}).value||'',
     invoiceAmount:document.getElementById('f-invoice').value,
     miscFees:document.getElementById('f-misc').value,
@@ -1576,10 +2166,17 @@ function saveBooking() {
       const existing=bookings[idx];
       booking={
         ...existing, ...f, id:existing.id, isDraft:false, dispatched:true,
-        reminders: (existing.reminders && existing.reminders.length && !existing.isDraft) ? existing.reminders : [
-          {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:reminderDate,done:false},
-          {type:'parent-call',label:'Parent Confirmation Call',dueDate:reminderDate,done:false}
-        ]
+        reminders: (()=>{
+          // Always re-calculate dueDate in case arrival date changed
+          const oldReminders = (existing.reminders && existing.reminders.length && !existing.isDraft) ? existing.reminders : [];
+          const defaults = [
+            {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:reminderDate,done:false},
+            {type:'parent-call',label:'Parent Confirmation Call',dueDate:reminderDate,done:false}
+          ];
+          if(!oldReminders.length) return defaults;
+          // Keep done status but update dueDate to reflect new arrival date
+          return defaults.map(def=>{const old=oldReminders.find(r=>r.type===def.type);return old?{...def,done:old.done}:def;});
+        })()
       };
       bookings[idx]=booking;
     }
@@ -1800,19 +2397,19 @@ function viewBooking(id) {
     <div style="display:grid;grid-template-columns:auto auto auto;gap:6px 8px;margin-bottom:20px;align-items:center;max-width:420px">
       <span style="font-size:13px">👤 Admin (Vinod)</span>
       <button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encodeURIComponent(opsMsg)}','admin')">💬 WA</button>
-      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('admin','${encodeURIComponent(opsMsg)}','Arrival Brief — ${b.studentName}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>
+      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('admin','${encodeURIComponent(opsMsg)}','Arrival Brief — ${b.studentName.replace(/'/g,'')}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>
 
       <span style="font-size:13px">📋 Ops (Rohit)</span>
       <button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encodeURIComponent(opsMsg)}','ops')">💬 WA</button>
-      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('ops','${encodeURIComponent(opsMsg)}','Arrival Brief — ${b.studentName}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>
+      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('ops','${encodeURIComponent(opsMsg)}','Arrival Brief — ${b.studentName.replace(/'/g,'')}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>
 
       <span style="font-size:13px">🧾 Accounts</span>
       <button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encodeURIComponent(accountsMsg)}','accounts')">💬 WA</button>
-      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('accounts','${encodeURIComponent(accountsMsg)}','Invoice Request — ${b.studentName}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>
+      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('accounts','${encodeURIComponent(accountsMsg)}','Invoice Request — ${b.studentName.replace(/'/g,'')}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>
 
       ${hasHospitality?`<span style="font-size:13px">🏠 Hospitality</span>
       <button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encodeURIComponent(hospitalityMsg)}','hospitality')">💬 WA</button>
-      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('hospitality','${encodeURIComponent(hospitalityMsg)}','Hospitality — ${b.studentName}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>`:'<span></span><span></span><span></span>'}
+      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('hospitality','${encodeURIComponent(hospitalityMsg)}','Hospitality — ${b.studentName.replace(/'/g,'')}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>`:'<span></span><span></span><span></span>'}
 
       ${hasAirport?`<span style="font-size:13px">✈️ Transport</span>
       <button class="btn btn-sm btn-wa" onclick="sendTravelWA('${b.id}')">💬 WA</button>
@@ -1823,11 +2420,11 @@ function viewBooking(id) {
       <div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
         <select id="tc-pdf-select" style="font-size:12px;padding:5px 8px;border:1.5px solid #cbd5e0;border-radius:6px;background:#fff;color:#1a202c;min-width:200px">
           <option value="">— No PDF (message only) —</option>
-          ${settings.pdfVisiting?`<option value="${settings.pdfVisiting}">Visiting Programme PDF</option>`:''}
-          ${settings.pdfAnnual?`<option value="${settings.pdfAnnual}">Annual Programme PDF</option>`:''}
+          ${settings.pdfVisiting?`<option value="${settings.pdfVisiting}" ${!isAnnual&&settings.pdfVisiting?'selected':''}>Visiting Programme PDF</option>`:''}
+          ${settings.pdfAnnual?`<option value="${settings.pdfAnnual}" ${isAnnual&&settings.pdfAnnual?'selected':''}>Annual Programme PDF</option>`:''}
         </select>
         <button class="btn btn-sm btn-wa" onclick="sendTCWhatsApp()">💬 WA</button>
-        <button class="btn btn-sm btn-secondary" onclick="sendTCEmail('${b.studentName}','${b.id}')">📧 Email</button>
+        <button class="btn btn-sm btn-secondary" onclick="sendTCEmail('${b.studentName.replace(/'/g,'')}','${b.id}')">📧 Email</button>
       </div>
       `:'<span></span><span></span><span></span>'}
     </div>
@@ -1943,7 +2540,7 @@ function deleteBooking(id){
   renderDashboard();
   // Sync deletion to Google Sheet
   if(settings.sheetUrl){
-    fetch(settings.sheetUrl,{method:'POST',mode:'cors',headers:{'Content-Type':'text/plain'},
+    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
       body:JSON.stringify({action:'deleteBooking',id:id})})
     .catch(e=>console.warn('Delete sync failed:',e.message));
   }
@@ -1956,7 +2553,7 @@ function renderReminders() {
   const icons={'things-to-carry':'📦','parent-call':'📞'};
   const allReminders=[];
   bookings.forEach(b=>{
-    b.reminders.forEach(r=>{
+    (b.reminders||[]).forEach(r=>{
       allReminders.push({...r,bookingId:b.id,studentName:b.studentName,arrivalDate:b.arrivalDate,phone:b.phone,parentName:b.parentName,inclusions:b.inclusions,trainingPeriod:b.trainingPeriod,programmeType:b.programmeType,arrivalTime:b.arrivalTime,departureDate:b.departureDate});
     });
   });
@@ -2150,18 +2747,21 @@ function getSheet() {
 
 function bookingToRow(b) {
   const inv = {base:Number(b.invoiceAmount||0), misc:Number(b.miscFees||0)};
-  inv.subtotal = inv.base + inv.misc;
-  inv.gst = b.gstApplicable ? Math.round(inv.subtotal * 0.18) : 0;
   inv.discount = b.discountApplicable ? Number(b.discountAmount||0) : 0;
-  inv.total = inv.subtotal + inv.gst - inv.discount;
+  inv.netFee = inv.base - inv.discount;
+  inv.preGst = inv.netFee + inv.misc;
+  inv.gst = b.gstApplicable ? Math.round(inv.preGst * 0.18) : 0;
+  inv.total = inv.preGst + inv.gst;
   const td = b.trainingPeriod ? b.trainingPeriod.split(' to ') : ['',''];
   const trainingFrom = b.trainingStartDate || td[0] || '';
   const trainingTo   = b.trainingEndDate   || td[1] || '';
   return [b.id, b.studentName, b.age, b.gender, b.homeCity, b.parentName, b.phone, b.email,
     b.programmeType, (b.inclusions||[]).join(', '),
-    b.arrivalDate, b.arrivalTime, trainingFrom, trainingTo, b.departureDate,
+    b.arrivalDate||'', b.arrivalTime||'', trainingFrom, trainingTo, b.departureDate||'',
     inv.base, inv.misc, inv.gst, inv.discount, inv.total,
-    b.accountsNotes, b.specialNotes, b.status||'confirmed', b.createdAt];
+    b.accountsNotes||'', b.specialNotes||'', b.status||(b.isDraft?'draft':'confirmed'), b.createdAt||'',
+    b.isDraft ? 'YES' : '',
+    b.travellerName||'', b.travellerContact||'', b.flightNo||'', b.flightArrivalTime||'', b.terminal||'', b.accompanyingStaff||''];
 }
 
 function doPost(e) {
@@ -2239,12 +2839,48 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
   // Lead handoff: read URL params and pre-fill booking form
   checkLeadHandoffParams();
+  // On PWA resume (iOS/Android may suspend app when switching to WhatsApp),
+  // restore lead handoff form fields from localStorage
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      const modal = document.getElementById('lead-handoff-modal');
+      if (modal && modal.style.display !== 'none') _lhRestoreFields();
+    }
+  });
 });
 
 // ─── LEAD HANDOFF ────────────────────────────────────────────────────────────
 
+function _lhSaveFields() {
+  const data = {
+    name:   (document.getElementById('lh-name')||{}).value||'',
+    age:    (document.getElementById('lh-age')||{}).value||'',
+    gender: (document.getElementById('lh-gender')||{}).value||'',
+    city:   (document.getElementById('lh-city')||{}).value||'',
+    parent: (document.getElementById('lh-parent')||{}).value||'',
+    phone:  (document.getElementById('lh-phone')||{}).value||'',
+    email:  (document.getElementById('lh-email')||{}).value||'',
+    prog:   (document.getElementById('lh-prog')||{}).value||'',
+    notes:  (document.getElementById('lh-notes')||{}).value||''
+  };
+  localStorage.setItem('lh_draft', JSON.stringify(data));
+}
+
+function _lhRestoreFields() {
+  try {
+    const saved = localStorage.getItem('lh_draft');
+    if (!saved) return;
+    const d = JSON.parse(saved);
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    set('lh-name', d.name); set('lh-age', d.age); set('lh-gender', d.gender);
+    set('lh-city', d.city); set('lh-parent', d.parent); set('lh-phone', d.phone);
+    set('lh-email', d.email); set('lh-prog', d.prog); set('lh-notes', d.notes);
+  } catch(e) {}
+}
+
 function openLeadHandoff() {
   document.getElementById('lead-handoff-modal').style.display = 'flex';
+  _lhRestoreFields();
 }
 
 function closeLeadHandoff() {
@@ -2282,6 +2918,8 @@ function sendLeadHandoff() {
     (notes  ? `\n*Notes:* ${notes}\n` : '') +
     `\nOpen this link to create the booking (form will be pre-filled):\n${link}`;
 
+  // Save fields to localStorage so they survive PWA suspension on iOS/Android
+  _lhSaveFields();
   // Opens WhatsApp with message pre-filled — select TSG Booking group manually
   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   document.getElementById('lh-status').textContent = '✓ WhatsApp opened — select TSG Booking group to send';
@@ -2331,6 +2969,7 @@ function sendParentBookingLink() {
     `https://www.tsgacademy.in/visiting-students-form.php\n\n` +
     `Warm regards,\nTSG Academy`;
 
+  _lhSaveFields();
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
   document.getElementById('lh-status').textContent = '✓ WhatsApp opened for parent';
 }
