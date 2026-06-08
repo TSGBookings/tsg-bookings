@@ -1583,7 +1583,7 @@ function calcInvoice(b) {
 function _revenueCategory(progType) {
   const p = (progType || '').toLowerCase();
   if (p.includes('annual')) return 'annual';
-  if (p.includes('single session') || p.includes('campus visit') || p.includes('daily')) return 'single';
+  if (p.includes('single session') || p.includes('campus visit') || p.includes('daily') || p === 'other' || p.startsWith('other: ')) return 'single';
   return 'visiting'; // 1 week, 1 month, weekly, monthly, boot camp, etc.
 }
 
