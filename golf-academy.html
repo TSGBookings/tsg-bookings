@@ -427,9 +427,9 @@ textarea { resize: vertical; min-height: 80px; }
         <span class="nav-icon">➕</span>
         <span class="nav-label">New Booking</span>
       </div>
-      <div class="nav-item" data-section="reminders" onclick="showSection('reminders', this)">
-        <span class="nav-icon">🔔</span>
-        <span class="nav-label">Reminders</span>
+      <div class="nav-item" data-section="dispatchlog" onclick="showSection('dispatchlog', this);renderDispatchLog()">
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">Dispatch Log</span>
       </div>
       <div class="nav-item" data-section="alumni" onclick="showSection('alumni', this);renderAlumni()">
         <span class="nav-icon">🎓</span>
@@ -438,6 +438,10 @@ textarea { resize: vertical; min-height: 80px; }
       <div class="nav-item" data-section="settings" onclick="showSection('settings', this)">
         <span class="nav-icon">⚙️</span>
         <span class="nav-label">Settings</span>
+      </div>
+      <div class="nav-item" id="nav-revenue" data-section="revenue" onclick="showRevenue(this)" style="display:none">
+        <span class="nav-icon">💰</span>
+        <span class="nav-label">Revenue</span>
       </div>
     </div>
   </nav>
@@ -453,26 +457,7 @@ textarea { resize: vertical; min-height: 80px; }
       </div>
       <div class="stats-grid" id="stats-grid"></div>
       <div id="drafts-panel"></div>
-      <div class="card" id="revenue-card" style="margin-bottom:16px">
-        <div class="flex items-center mb-12">
-          <div class="card-title" style="margin-bottom:0">📈 Monthly Revenue <span style="font-size:11px;font-weight:400;color:#718096">(programme fee only, excl. GST &amp; misc)</span></div>
-          <div class="ml-auto"><span id="revenue-total" style="font-size:13px;font-weight:700;color:#276749"></span></div>
-        </div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <thead>
-              <tr style="background:#f8fafb;border-bottom:2px solid #e2e8f0">
-                <th style="text-align:left;padding:7px 12px;font-weight:600">Month</th>
-                <th style="text-align:right;padding:7px 12px;font-weight:600">Bookings</th>
-                <th style="text-align:right;padding:7px 12px;font-weight:600;color:#276749">Visiting</th>
-                <th style="text-align:right;padding:7px 12px;font-weight:600;color:#7c3aed">Annual</th>
-                <th style="text-align:right;padding:7px 12px;font-weight:600;color:#b45309">Sessions</th>
-              </tr>
-            </thead>
-            <tbody id="revenue-tbody"></tbody>
-          </table>
-        </div>
-      </div>
+
       <div class="card">
         <div class="flex items-center mb-16" id="pdf-btn-row">
           <div class="card-title" style="margin-bottom:0">All Bookings</div>
@@ -492,7 +477,6 @@ textarea { resize: vertical; min-height: 80px; }
                 <th>Arrival</th>
                 <th>Departure</th>
                 <th>Inclusions</th>
-                <th>Invoice Total</th>
                 <th>Status</th>
                 <th class="no-print">Actions</th>
               </tr>
@@ -530,12 +514,12 @@ textarea { resize: vertical; min-height: 80px; }
     </div>
 
     <!-- REMINDERS -->
-    <div id="section-reminders" class="section">
+    <div id="section-dispatchlog" class="section">
       <div class="section-header">
-        <h1>Reminders</h1>
-        <p>Scheduled reminders — 1 day before each student's arrival</p>
+        <h1>📋 Dispatch Log</h1>
+        <p>Who was informed, when, and what is still pending — across all bookings</p>
       </div>
-      <div id="reminders-list"></div>
+      <div id="dispatch-log-list"></div>
     </div>
 
     <!-- SETTINGS -->
@@ -659,6 +643,7 @@ textarea { resize: vertical; min-height: 80px; }
             <button class="btn btn-secondary btn-sm" onclick="importData()">⬆ Import JSON</button>
             <button class="btn btn-primary btn-sm" onclick="syncAllToSheets()">☁ Sync All to Google Sheet</button>
             <button class="btn btn-danger btn-sm" onclick="resetToSample()">↺ Reset to Sample Data</button>
+            <button class="btn btn-secondary btn-sm" onclick="markOnCampusAsDone()">✅ Mark On-Campus Dispatch Done (≤ 15 Jun)</button>
           </div>
           <div id="sync-all-status" style="margin-top:8px;font-size:13px;color:#059669;display:none"></div>
           <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="handleImportFile(event)">
@@ -666,6 +651,35 @@ textarea { resize: vertical; min-height: 80px; }
 
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
         <span id="settings-saved" class="text-sm text-green" style="margin-left:12px;display:none">✓ Saved successfully</span>
+      </div>
+    </div>
+
+
+    <!-- REVENUE (password protected) -->
+    <div id="section-revenue" class="section">
+      <div class="section-header">
+        <h1>💰 Revenue</h1>
+        <p>Programme fee summary — visible to Rokhsar only</p>
+      </div>
+      <div class="card">
+        <div class="flex items-center mb-12">
+          <div class="card-title" style="margin-bottom:0">📈 Monthly Revenue <span style="font-size:11px;font-weight:400;color:#718096">(programme fee only, excl. GST &amp; misc)</span></div>
+          <div class="ml-auto"><span id="revenue-total" style="font-size:13px;font-weight:700;color:#276749"></span></div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:#f8fafb;border-bottom:2px solid #e2e8f0">
+                <th style="text-align:left;padding:7px 12px;font-weight:600">Month</th>
+                <th style="text-align:right;padding:7px 12px;font-weight:600">Bookings</th>
+                <th style="text-align:right;padding:7px 12px;font-weight:600;color:#276749">Visiting</th>
+                <th style="text-align:right;padding:7px 12px;font-weight:600;color:#7c3aed">Annual</th>
+                <th style="text-align:right;padding:7px 12px;font-weight:600;color:#b45309">Sessions</th>
+              </tr>
+            </thead>
+            <tbody id="revenue-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -713,6 +727,28 @@ textarea { resize: vertical; min-height: 80px; }
   </main>
 </div>
 
+
+<!-- LOGIN OVERLAY -->
+<div id="login-overlay" style="display:flex;position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.92);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:36px 32px;width:340px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,0.25);text-align:center">
+    <div style="font-size:32px;margin-bottom:8px">⛳</div>
+    <div style="font-size:20px;font-weight:700;color:#1a202c;margin-bottom:4px">TSG Command Centre</div>
+    <div style="font-size:13px;color:#718096;margin-bottom:24px">Select your profile to continue</div>
+    <div style="margin-bottom:16px">
+      <select id="login-user-select" style="width:100%;padding:10px 12px;font-size:14px;border:1.5px solid #cbd5e0;border-radius:8px;background:#f8fafc;color:#1a202c" onchange="onLoginUserChange()">
+        <option value="">— Select —</option>
+        <option value="Rokhsar">Rokhsar</option>
+        <option value="Admin">Admin</option>
+      </select>
+    </div>
+    <div id="login-password-row" style="display:none;margin-bottom:16px">
+      <input id="login-password-input" type="password" placeholder="Enter password" style="width:100%;padding:10px 12px;font-size:14px;border:1.5px solid #cbd5e0;border-radius:8px;box-sizing:border-box" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="login-error" style="color:#e53e3e;font-size:12px;margin-bottom:12px;display:none">Incorrect password. Please try again.</div>
+    <button onclick="doLogin()" style="width:100%;padding:11px;background:#276749;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Enter</button>
+  </div>
+</div>
+
 <!-- LEAD HANDOFF MODAL -->
 <div class="modal-overlay" id="lead-handoff-modal" style="display:none">
   <div class="modal" style="max-width:560px">
@@ -756,6 +792,28 @@ textarea { resize: vertical; min-height: 80px; }
           <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-weight:600">SEND TO PARENT (requires phone number above)</div>
           <button class="btn btn-wa" onclick="sendParentBookingLink()" style="font-size:13px">💬 Send Booking Link to Parent</button>
           <div style="font-size:11px;color:var(--text-muted);margin-top:6px;font-style:italic">"We need a few details to confirm your booking and raise the invoice. Please click the link and submit the details. Our admin office will be in touch within 24 hours."</div>
+        </div>
+        <div style="border-top:1px solid #e2e8f0;padding-top:12px">
+          <div style="font-size:12px;font-weight:700;color:#1a202c;margin-bottom:10px">CRITICAL — PARENT ONBOARDING</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;padding:10px 12px">
+              <div>
+                <div style="font-size:13px;font-weight:600">📦 Things to Carry</div>
+                <div id="lh-tc-status" style="font-size:11px;color:#718096;margin-top:2px">Not yet sent</div>
+              </div>
+              <button onclick="lhSendTC()" class="btn btn-wa btn-sm">💬 Send WA</button>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:10px 12px">
+              <div>
+                <div style="font-size:13px;font-weight:600">📋 Visiting Student Form</div>
+                <div id="lh-vsf-status" style="font-size:11px;color:#718096;margin-top:2px">Not yet sent</div>
+              </div>
+              <div style="display:flex;gap:6px">
+                <a href="https://www.tsgacademy.in/admin/index.php" target="_blank" style="padding:5px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;background:#7c3aed;color:#fff;text-decoration:none">🔗 Open Portal</a>
+                <button onclick="lhMarkVSF()" class="btn btn-sm" style="background:#f0fff4;border:1.5px solid #276749;color:#276749;font-weight:600">✓ Mark Sent</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1345,7 +1403,8 @@ let settings = {
 let currentStep = 1;
 let editingBookingId = null;
 let formData = {};
-let currentMonth = new Date(2026, 3, 1);
+let currentUser = null; // 'Rokhsar' or 'Admin'
+let currentMonth = (()=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),1);})();
 
 // ===================== INIT =====================
 // Manual invoice corrections — applied once on load
@@ -1369,7 +1428,9 @@ function applyInvoiceCorrections() {
 function init() {
   loadState();
   applyInvoiceCorrections();
-  renderDashboard();
+  // Show login overlay — app content renders after login
+  const overlay = document.getElementById('login-overlay');
+  if (overlay) overlay.style.display = 'flex';
   document.getElementById('view-modal').addEventListener('click', e => {
     if (e.target.id === 'view-modal') closeModal();
   });
@@ -1501,7 +1562,7 @@ function showSection(name, el) {
   if (name==='dashboard') renderDashboard();
   if (name==='monthly') renderMonthly();
   if (name==='booking') initBookingForm();
-  if (name==='reminders') renderReminders();
+  if (name==='dispatchlog') renderDispatchLog();
 }
 
 // ===================== HELPERS =====================
@@ -1562,6 +1623,8 @@ function progBadge(p) {
 }
 function uid() { return 'b'+Date.now().toString(36)+Math.random().toString(36).substr(2,5); }
 function today() { return new Date().toISOString().split('T')[0]; }
+// HTML escape — always use for user-entered data injected into innerHTML
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function isOnCampus(b) {
   const now=new Date(), arr=new Date(b.arrivalDate+'T00:00:00'), dep=new Date(b.departureDate+'T23:59:59');
   return arr<=now && dep>=now;
@@ -1595,7 +1658,7 @@ function renderRevenue() {
     const cat = _revenueCategory(b.programmeType);
     if (!byMonth[key]) byMonth[key] = {count:0, visiting:0, annual:0, single:0};
     byMonth[key].count++;
-    byMonth[key][cat] += Number(b.invoiceAmount || 0);
+    byMonth[key][cat] += calcInvoice(b).total; // use total (fee + misc + GST - discount)
   });
   const months = Object.keys(byMonth).sort().reverse();
   const tbody = document.getElementById('revenue-tbody');
@@ -1682,22 +1745,19 @@ function renderDashboard() {
     tbody.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="icon">📋</div><p>${query?'No results found.':'No bookings yet. Create your first booking!'}</p></div></td></tr>`;
     return;
   }
-  const sorted=[...filtered].sort((a,b)=>a.arrivalDate.localeCompare(b.arrivalDate));
+  const sorted=[...filtered].sort((a,b)=>(a.arrivalDate||'').localeCompare(b.arrivalDate||''));
   tbody.innerHTML=sorted.map(b=>{
     const onCampusNow=isOnCampus(b);
-    const {total}=calcInvoice(b);
     return `<tr>
-      <td><strong>${b.studentName}</strong>${onCampusNow?'<span class="badge badge-green" style="margin-left:6px">On Campus</span>':''}<br><span class="text-sm text-muted">${b.age}y · ${b.gender} · ${b.homeCity}</span><br><span class="text-sm text-muted">${b.parentName||''} · ${b.phone||''}</span></td>
+      <td><strong>${esc(b.studentName)}</strong>${onCampusNow?'<span class="badge badge-green" style="margin-left:6px">On Campus</span>':''}<br><span class="text-sm text-muted">${esc(b.age)}y · ${esc(b.gender)||'—'} · ${esc(b.homeCity)}</span><br><span class="text-sm text-muted">${esc(b.parentName)} · ${esc(b.phone)}</span><br><span class="text-sm text-muted">${esc(b.email)}</span></td>
       <td>${progBadge(b.programmeType)}</td>
       <td>${fmtDateShort(b.arrivalDate)}<br><span class="text-sm text-muted">${fmtTime(b.arrivalTime)}</span></td>
       <td>${fmtDateShort(b.departureDate)}</td>
       <td>${inclBadges(b.inclusions)}</td>
-      <td><strong>₹${total.toLocaleString('en-IN')}</strong></td>
-      <td>${b.dispatched?'<span class="badge badge-done">✓ Dispatched</span>':'<span class="badge" style="background:#fff3cd;color:#856404">Pending</span>'}</td>
+      <td>${dispatchBadgeHtml(b)}</td>
       <td><button class="btn btn-sm btn-secondary" onclick="viewBooking('${b.id}')">👁 View</button><button class="btn btn-sm btn-wa" style="margin-left:4px" onclick="quickWA('${b.id}')">💬</button></td>
     </tr>`;
   }).join('');
-  renderRevenue();
 }
 
 function downloadPDF() {
@@ -1724,7 +1784,7 @@ function renderMonthly() {
       </div>
       <div>
         <div class="col-label">Student · Age · From</div>
-        <div class="col-value"><strong>${b.studentName}</strong> <span class="text-muted">· ${b.age||'—'}y</span><br><span class="text-muted" style="font-size:11px">from ${b.homeCity||'—'}</span><br>${progBadge(b.programmeType)}</div>
+        <div class="col-value"><strong>${esc(b.studentName)}</strong> <span class="text-muted">· ${esc(b.age)||'—'}y</span><br><span class="text-muted" style="font-size:11px">from ${esc(b.homeCity)||'—'}</span><br>${progBadge(b.programmeType)}</div>
       </div>
       <div>
         <div class="col-label">Training</div>
@@ -1736,7 +1796,7 @@ function renderMonthly() {
       </div>
       <div>
         <div class="col-label">Parent · Phone</div>
-        <div class="col-value">${b.parentName}<br><span style="color:#38a169">${b.phone}</span></div>
+        <div class="col-value">${esc(b.parentName)}<br><span style="color:#38a169">${esc(b.phone)}</span></div>
       </div>
       <div>
         <div class="col-label">Inclusions</div>
@@ -1755,7 +1815,7 @@ function renderMonthly() {
       <td style="text-align:center;font-weight:700;color:#276749">${i+1}</td>
       <td>
         <div class="pt-name">${b.studentName}</div>
-        <div class="pt-sub">${b.age||'—'} yrs · ${b.homeCity||'—'}</div>
+        <div class="pt-sub">${b.age||'—'} yrs · ${b.gender||'—'} · ${b.homeCity||'—'}</div>
       </td>
       <td><span class="pt-badge ${b.programmeType?'badge-'+b.programmeType.toLowerCase().replace(/\s+/g,'-'):''}" style="background:#e6f4ee;color:#276749">${b.programmeType||'—'}</span></td>
       <td class="pt-date">${fmtDateShort(b.arrivalDate)}<br><span class="pt-sub">${fmtTime(b.arrivalTime)}</span></td>
@@ -1766,6 +1826,7 @@ function renderMonthly() {
       <td>
         <div class="pt-parent">${b.parentName||'—'}</div>
         <div class="pt-phone">${b.phone||''}</div>
+        <div class="pt-phone">${b.email||''}</div>
       </td>
     </tr>
   `).join('');
@@ -2153,7 +2214,7 @@ ${f.specialNotes?'\n⚠️ Special Requirements: '+f.specialNotes:''}
 Confirm room allocation by end of day.`;
   }
 
-  const reminderDate=(()=>{const d=new Date(f.arrivalDate+'T00:00:00');d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];})();
+  const reminderDate=(()=>{if(!f.arrivalDate)return '';try{const d=new Date(f.arrivalDate+'T00:00:00');if(isNaN(d.getTime()))return '';d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];}catch(e){return '';}})();
   return {opsMsg,accountsMsg,hospitalityMsg,reminderDate};
 }
 
@@ -2361,28 +2422,43 @@ function viewBooking(id) {
   invoiceLines+=`<div class="invoice-line total"><span>Total</span><span>₹${total.toLocaleString('en-IN')}</span></div>`;
 
   document.getElementById('modal-title').textContent=`${b.studentName} — ${b.programmeType}`;
+
+  // Travel details warning
+  const travelMissing = hasAirport && !(b.flightNo && b.flightArrivalTime);
+  const travelWarning = (hasAirport && travelMissing)
+    ? `<div style="background:#fff3cd;border:1.5px solid #fbbf24;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#856404;font-weight:600">⚠️ Airport Pick-up selected — travel details are incomplete. Please fill them in below.</div>`
+    : '';
+
   document.getElementById('modal-body').innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;margin-bottom:16px">
-      <div><div class="col-label">Age / Gender</div><div class="col-value">${b.age||'—'} · ${b.gender||'—'}</div></div>
-      <div><div class="col-label">Coming From</div><div class="col-value">${b.homeCity||'—'}</div></div>
-      <div><div class="col-label">Parent</div><div class="col-value">${b.parentName}</div></div>
-      <div><div class="col-label">Phone</div><div class="col-value"><a href="tel:${b.phone}" style="color:#38a169">${b.phone||'—'}</a></div></div>
-      <div><div class="col-label">Email</div><div class="col-value">${b.email||'—'}</div></div>
-      <div><div class="col-label">Arrival</div><div class="col-value">${fmtDate(b.arrivalDate)} ${b.arrivalTime?'at '+fmtTime(b.arrivalTime):''}</div></div>
-      <div><div class="col-label">Departure</div><div class="col-value">${fmtDate(b.departureDate)}</div></div>
-      <div><div class="col-label">Training Start</div><div class="col-value">${b.trainingStartDate?fmtDate(b.trainingStartDate):'—'}</div></div>
-      <div><div class="col-label">Training End</div><div class="col-value">${b.trainingEndDate?fmtDate(b.trainingEndDate):'—'}</div></div>
-      <div><div class="col-label">Training Period</div><div class="col-value">${b.trainingPeriod||'—'}</div></div>
-      <div><div class="col-label">Inclusions</div><div class="col-value">${inclBadges(b.inclusions)}</div></div>
+    <!-- SECTION 1: BOOKING SUMMARY -->
+    <div style="background:#f8fafc;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#718096;margin-bottom:10px">Booking Summary</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;font-size:13px">
+        <div><span class="col-label">Student</span><div class="col-value" style="font-weight:700;font-size:15px">${esc(b.studentName)}</div></div>
+        <div><span class="col-label">Age · Gender · City</span><div class="col-value">${esc(b.age)||'—'} · ${esc(b.gender)||'—'} · ${esc(b.homeCity)||'—'}</div></div>
+        <div><span class="col-label">Programme</span><div class="col-value">${progBadge(b.programmeType)}</div></div>
+        <div><span class="col-label">Inclusions</span><div class="col-value">${inclBadges(b.inclusions)}</div></div>
+        <div><span class="col-label">Arrival</span><div class="col-value">${fmtDate(b.arrivalDate)}${b.arrivalTime?' at '+fmtTime(b.arrivalTime):''}</div></div>
+        <div><span class="col-label">Departure</span><div class="col-value">${fmtDate(b.departureDate)}</div></div>
+        <div><span class="col-label">Training Start</span><div class="col-value">${b.trainingStartDate?fmtDate(b.trainingStartDate):'—'}</div></div>
+        <div><span class="col-label">Training End</span><div class="col-value">${b.trainingEndDate?fmtDate(b.trainingEndDate):'—'}</div></div>
+        <div><span class="col-label">Parent</span><div class="col-value">${esc(b.parentName)||'—'}</div></div>
+        <div><span class="col-label">Phone</span><div class="col-value"><a href="tel:${esc(b.phone)}" style="color:#38a169">${esc(b.phone)||'—'}</a></div></div>
+        <div style="grid-column:1/-1"><span class="col-label">Email</span><div class="col-value">${esc(b.email)||'—'}</div></div>
+        ${b.specialNotes?`<div style="grid-column:1/-1"><span class="col-label">Notes</span><div class="col-value" style="color:#856404">${esc(b.specialNotes)}</div></div>`:''}
+      </div>
     </div>
-    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px">
+
+    <!-- SECTION 2: TRAVEL DETAILS -->
+    <div style="background:#eff6ff;border:1.5px solid ${hasAirport&&travelMissing?'#fbbf24':'#bfdbfe'};border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <strong>✈️ Travel Details</strong>
+        <strong>✈️ Travel Details ${hasAirport?'<span style="color:#e53e3e;font-size:11px">— Required</span>':hasAirport?'':'<span style="font-size:11px;color:#718096;font-weight:400">(airport pick-up not selected)</span>'}</strong>
         <div style="display:flex;gap:6px">
           <button class="btn btn-sm btn-secondary" onclick="saveTravelDetails('${b.id}')">💾 Save</button>
-          <button class="btn btn-sm btn-wa" onclick="sendTravelWA('${b.id}')">💬 WhatsApp</button>
+          ${hasAirport?`<button class="btn btn-sm btn-wa" onclick="sendTravelWA('${b.id}')">💬 Send to Transport</button>`:''}
         </div>
       </div>
+      ${travelWarning}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
         <div><span class="col-label">Traveller Name</span><input id="vtd-trav-name-${b.id}" value="${b.travellerName||''}" placeholder="Name of person arriving" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
         <div><span class="col-label">Traveller Contact</span><input id="vtd-trav-contact-${b.id}" value="${b.travellerContact||''}" placeholder="Mobile number" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
@@ -2390,49 +2466,16 @@ function viewBooking(id) {
         <div><span class="col-label">Flight Arrival Time</span><input id="vtd-flight-time-${b.id}" type="time" value="${b.flightArrivalTime||''}" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
         <div><span class="col-label">Terminal</span><input id="vtd-terminal-${b.id}" value="${b.terminal||''}" placeholder="e.g. T2, Domestic" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
         <div><span class="col-label">TSG Staff for Pick-up</span><input id="vtd-staff-${b.id}" value="${b.accompanyingStaff||''}" placeholder="Staff name" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div style="grid-column:1/-1"><span class="col-label">Special Instructions</span><textarea id="vtd-special-${b.id}" placeholder="Any special instructions for transport / pick-up..." style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;resize:vertical;min-height:48px">${b.travelSpecialInstructions||''}</textarea></div>
       </div>
     </div>
-    <div class="invoice-summary" style="margin-bottom:16px">${invoiceLines}${b.accountsNotes?`<div style="margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:12px;color:#718096"><strong>Accounts note:</strong> ${b.accountsNotes}</div>`:''}</div>
-    ${b.specialNotes?`<div style="background:#fffbeb;border:1.5px solid #fbd38d;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px"><strong>Notes:</strong> ${b.specialNotes}</div>`:''}
-    <div class="card-title">Dispatch Messages</div>
-    <div style="display:grid;grid-template-columns:auto auto auto;gap:6px 8px;margin-bottom:20px;align-items:center;max-width:420px">
-      <span style="font-size:13px">👤 Admin (Vinod)</span>
-      <button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encodeURIComponent(opsMsg)}','admin')">💬 WA</button>
-      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('admin','${encodeURIComponent(opsMsg)}','Arrival Brief — ${b.studentName.replace(/'/g,'')}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>
 
-      <span style="font-size:13px">📋 Ops (Rohit)</span>
-      <button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encodeURIComponent(opsMsg)}','ops')">💬 WA</button>
-      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('ops','${encodeURIComponent(opsMsg)}','Arrival Brief — ${b.studentName.replace(/'/g,'')}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>
-
-      <span style="font-size:13px">🧾 Accounts</span>
-      <button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encodeURIComponent(accountsMsg)}','accounts')">💬 WA</button>
-      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('accounts','${encodeURIComponent(accountsMsg)}','Invoice Request — ${b.studentName.replace(/'/g,'')}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>
-
-      ${hasHospitality?`<span style="font-size:13px">🏠 Hospitality</span>
-      <button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encodeURIComponent(hospitalityMsg)}','hospitality')">💬 WA</button>
-      <button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('hospitality','${encodeURIComponent(hospitalityMsg)}','Hospitality — ${b.studentName.replace(/'/g,'')}',bookings.find(x=>x.id==='${b.id}'))">📧 Email</button>`:'<span></span><span></span><span></span>'}
-
-      ${hasAirport?`<span style="font-size:13px">✈️ Transport</span>
-      <button class="btn btn-sm btn-wa" onclick="sendTravelWA('${b.id}')">💬 WA</button>
-      <span></span>`:''}
-
-      ${!isSingleSession?`
-      <span style="font-size:13px;grid-column:1/-1;font-weight:600;margin-top:4px">📦 Parent — Things to Carry</span>
-      <div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
-        <select id="tc-pdf-select" style="font-size:12px;padding:5px 8px;border:1.5px solid #cbd5e0;border-radius:6px;background:#fff;color:#1a202c;min-width:200px">
-          <option value="">— No PDF (message only) —</option>
-          ${settings.pdfVisiting?`<option value="${settings.pdfVisiting}" ${!isAnnual&&settings.pdfVisiting?'selected':''}>Visiting Programme PDF</option>`:''}
-          ${settings.pdfAnnual?`<option value="${settings.pdfAnnual}" ${isAnnual&&settings.pdfAnnual?'selected':''}>Annual Programme PDF</option>`:''}
-        </select>
-        <button class="btn btn-sm btn-wa" onclick="sendTCWhatsApp()">💬 WA</button>
-        <button class="btn btn-sm btn-secondary" onclick="sendTCEmail('${b.studentName.replace(/'/g,'')}','${b.id}')">📧 Email</button>
-      </div>
-      `:'<span></span><span></span><span></span>'}
-    </div>
-    <div class="card-title">Reminders</div>
+    <!-- SECTION 3: DISPATCH STATUS -->
     <div style="margin-bottom:16px">
-      ${(b.reminders||[]).map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f4f8"><span>${r.done?'✅':'⏳'}</span><span style="flex:1;font-size:13px">${r.label} — ${fmtDate(r.dueDate)}</span>${!r.done?`<button class="btn btn-sm btn-secondary" onclick="markDoneFromModal('${b.id}','${r.type}')">Mark Done</button>`:''}</div>`).join('')}
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#718096;margin-bottom:10px">Dispatch Status</div>
+      <div id="dispatch-table-${b.id}">${buildDispatchTableHtml(b.id)}</div>
     </div>
+
     <div class="flex gap-8"><button class="btn btn-secondary btn-sm" onclick="editBooking('${b.id}')">✏️ Edit Booking</button><button class="btn btn-danger btn-sm" onclick="deleteBooking('${b.id}')">🗑 Delete Booking</button></div>
   `;
   document.getElementById('view-modal').classList.add('open');
@@ -2488,6 +2531,7 @@ function saveTravelDetails(id) {
   b.flightArrivalTime= (document.getElementById('vtd-flight-time-'+id)||{}).value||'';
   b.terminal         = (document.getElementById('vtd-terminal-'+id)||{}).value||'';
   b.accompanyingStaff= (document.getElementById('vtd-staff-'+id)||{}).value||'';
+  b.travelSpecialInstructions = (document.getElementById('vtd-special-'+id)||{}).value||'';
   saveState();
   syncToSheets(b);
   // Flash the Save button green to confirm
@@ -2641,12 +2685,30 @@ function saveSettings() {
 
 async function testSheetsSync(){const url=document.getElementById('s-sheet-url').value.trim();if(!url){alert('Enter your Apps Script Web App URL first.');return;}const el=document.getElementById('sync-status');el.textContent='Testing...';try{const r=await fetch(url+'?action=ping',{mode:'cors'});el.textContent=r.ok?'✓ Connected!':'✗ Failed ('+r.status+')';}catch(e){el.textContent='✗ Error — check URL';}}
 
+function _showSyncToast(msg, isError) {
+  let t = document.getElementById('_sync-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = '_sync-toast';
+    t.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:99999;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.18);transition:opacity 0.4s;pointer-events:none';
+    document.body.appendChild(t);
+  }
+  t.style.background = isError ? '#fee2e2' : '#dcfce7';
+  t.style.color = isError ? '#991b1b' : '#166534';
+  t.style.border = isError ? '1.5px solid #fca5a5' : '1.5px solid #86efac';
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(() => { t.style.opacity = '0'; }, isError ? 6000 : 3000);
+}
+
 async function syncToSheets(booking){
   if(!settings.sheetUrl)return;
   try{
-    // no-cors is fine for writes — request reaches server even without response
-    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'addBooking',booking}),headers:{'Content-Type':'text/plain'}});
-  }catch(e){console.warn('Sheets sync failed:',e);}
+    // no-cors: request reaches server even though we can't read the response body
+    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'addBooking',booking}),headers:{'Content-Type':'text/plain'}})
+      .catch(e=>{ console.warn('Sheets sync failed:',e); _showSyncToast('⚠️ Sheet sync failed — check your connection. Data saved locally.', true); });
+  }catch(e){console.warn('Sheets sync failed:',e); _showSyncToast('⚠️ Sheet sync failed — data saved locally.', true);}
 }
 
 async function syncAllToSheets(){
@@ -2731,11 +2793,30 @@ function resetToSample(){if(!confirm('Reset all bookings to April 2026 sample da
 function copyAppsScript(){
   const s = `// TSG Golf Academy — Bookings Google Apps Script
 // Deploy as Web App: Execute as Me, Anyone can access
+// v7 — adds GST flag column, dispatchLog column, fixes date/time auto-conversion
 
-const HEADERS = ['ID','Student','Age','Gender','City','Parent','Phone','Email','Programme','Inclusions','Arrival Date','Arrival Time','Training From','Training To','Departure','Programme Fee','Misc Fees','GST','Discount','Total','Accounts Notes','Special Notes','Status','Created'];
+// Column layout (1-indexed):
+// 1=ID, 2=Student, 3=Age, 4=Gender, 5=City, 6=Parent, 7=Phone, 8=Email,
+// 9=Programme, 10=Inclusions, 11=Arrival Date, 12=Arrival Time, 13=Training From,
+// 14=Training To, 15=Departure, 16=Programme Fee, 17=Misc Fees, 18=GST Amount,
+// 19=Discount, 20=Total, 21=Accounts Notes, 22=Special Notes, 23=Status,
+// 24=Created, 25=Is Draft, 26=Traveller Name, 27=Traveller Contact, 28=Flight No,
+// 29=Flight Arrival Time, 30=Terminal, 31=Accompanying Staff,
+// 32=GST Flag, 33=Discount Flag, 34=Dispatch Log
+
+const HEADERS = [
+  'ID','Student','Age','Gender','City','Parent','Phone','Email',
+  'Programme','Inclusions','Arrival Date','Arrival Time','Training From',
+  'Training To','Departure','Programme Fee','Misc Fees','GST','Discount','Total',
+  'Accounts Notes','Special Notes','Status','Created','Is Draft',
+  'Traveller Name','Traveller Contact','Flight No','Flight Arrival Time','Terminal',
+  'Accompanying Staff','GST Flag','Discount Flag','Dispatch Log'
+];
+
+const SPREADSHEET_ID = '1Nk-zFjOYd4UvWN_HyYvWqgr-R7e7Div_K8PotX_X0Nc';
 
 function getSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName('Bookings');
   if (!sheet) {
     sheet = ss.insertSheet('Bookings');
@@ -2743,7 +2824,44 @@ function getSheet() {
     sheet.getRange(1,1,1,HEADERS.length).setFontWeight('bold').setBackground('#276749').setFontColor('#ffffff');
     sheet.setFrozenRows(1);
   }
+  var textCols = [11, 12, 13, 14, 15];
+  textCols.forEach(function(col) {
+    sheet.getRange(2, col, 1000, 1).setNumberFormat('@STRING@');
+  });
   return sheet;
+}
+
+function formatDate(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    var y = val.getFullYear();
+    if (y < 1990) return '';
+    var m = String(val.getMonth()+1).padStart(2,'0');
+    var d = String(val.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+d;
+  }
+  var s = String(val).trim();
+  if (s.includes('T')) {
+    var dt = new Date(s);
+    if (!isNaN(dt.getTime()) && dt.getFullYear() > 1990) {
+      return dt.getUTCFullYear()+'-'+String(dt.getUTCMonth()+1).padStart(2,'0')+'-'+String(dt.getUTCDate()).padStart(2,'0');
+    }
+    return '';
+  }
+  if (s.match(/^\\d{4}-\\d{2}-\\d{2}$/)) return s;
+  return s;
+}
+
+function formatTime(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    var h = String(val.getHours()).padStart(2,'0');
+    var m = String(val.getMinutes()).padStart(2,'0');
+    return h+':'+m;
+  }
+  var s = String(val).trim();
+  if (s.match(/^\\d{1,2}:\\d{2}(:\\d{2})?$/)) return s.substring(0,5);
+  return s;
 }
 
 function bookingToRow(b) {
@@ -2756,23 +2874,28 @@ function bookingToRow(b) {
   const td = b.trainingPeriod ? b.trainingPeriod.split(' to ') : ['',''];
   const trainingFrom = b.trainingStartDate || td[0] || '';
   const trainingTo   = b.trainingEndDate   || td[1] || '';
-  return [b.id, b.studentName, b.age, b.gender, b.homeCity, b.parentName, b.phone, b.email,
+  const dispatchLogStr = b.dispatchLog && Object.keys(b.dispatchLog).length ? JSON.stringify(b.dispatchLog) : '';
+  return [
+    b.id, b.studentName, b.age, b.gender, b.homeCity, b.parentName, b.phone, b.email,
     b.programmeType, (b.inclusions||[]).join(', '),
     b.arrivalDate||'', b.arrivalTime||'', trainingFrom, trainingTo, b.departureDate||'',
     inv.base, inv.misc, inv.gst, inv.discount, inv.total,
     b.accountsNotes||'', b.specialNotes||'', b.status||(b.isDraft?'draft':'confirmed'), b.createdAt||'',
     b.isDraft ? 'YES' : '',
-    b.travellerName||'', b.travellerContact||'', b.flightNo||'', b.flightArrivalTime||'', b.terminal||'', b.accompanyingStaff||''];
+    b.travellerName||'', b.travellerContact||'', b.flightNo||'', b.flightArrivalTime||'',
+    b.terminal||'', b.accompanyingStaff||'',
+    b.gstApplicable ? 'YES' : '',
+    b.discountApplicable ? 'YES' : '',
+    dispatchLogStr
+  ];
 }
 
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const sheet = getSheet();
-
     if (data.action === 'addBooking') {
       const b = data.booking;
-      // Check if row with this ID already exists — update it if so
       const ids = sheet.getRange(2,1,Math.max(sheet.getLastRow()-1,1),1).getValues().flat();
       const existingRow = ids.indexOf(b.id);
       if (existingRow >= 0) {
@@ -2781,29 +2904,85 @@ function doPost(e) {
         sheet.appendRow(bookingToRow(b));
       }
     }
-
+    if (data.action === 'deleteBooking') {
+      const id = data.id;
+      const ids = sheet.getRange(2,1,Math.max(sheet.getLastRow()-1,1),1).getValues().flat();
+      const rowIdx = ids.indexOf(id);
+      if (rowIdx >= 0) sheet.deleteRow(rowIdx + 2);
+    }
     if (data.action === 'syncAll') {
       const bookings = data.bookings || [];
-      // Clear existing data (keep header)
       if (sheet.getLastRow() > 1) sheet.getRange(2,1,sheet.getLastRow()-1,HEADERS.length).clearContent();
-      // Write all bookings
       if (bookings.length > 0) {
         const rows = bookings.map(bookingToRow);
         sheet.getRange(2,1,rows.length,HEADERS.length).setValues(rows);
       }
     }
-
-    return ContentService.createTextOutput(JSON.stringify({success:true, count: data.bookings ? data.bookings.length : 1})).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({success:true})).setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({error:err.toString()})).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
 function doGet(e) {
-  if (e.parameter.action === 'ping')
-    return ContentService.createTextOutput(JSON.stringify({status:'ok', version:'2.0'})).setMimeType(ContentService.MimeType.JSON);
+  const action = e.parameter.action;
+  if (action === 'ping')
+    return ContentService.createTextOutput(JSON.stringify({status:'ok', version:'4.0'})).setMimeType(ContentService.MimeType.JSON);
+  if (action === 'getAll') {
+    const sheet = getSheet();
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return ContentService.createTextOutput(JSON.stringify({bookings:[]})).setMimeType(ContentService.MimeType.JSON);
+    const data = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+    const bookings = data.filter(row => row[0]).map(row => {
+      let dispatchLog = {};
+      try { if (row[33]) dispatchLog = JSON.parse(String(row[33])); } catch(e) {}
+      return {
+        id: String(row[0]),
+        studentName: String(row[1]||''),
+        age: String(row[2]||''),
+        gender: String(row[3]||''),
+        homeCity: String(row[4]||''),
+        parentName: String(row[5]||''),
+        phone: String(row[6]||''),
+        email: String(row[7]||''),
+        programmeType: String(row[8]||''),
+        inclusions: row[9] ? String(row[9]).split(', ') : [],
+        arrivalDate: formatDate(row[10]),
+        arrivalTime: formatTime(row[11]),
+        trainingStartDate: formatDate(row[12]),
+        trainingEndDate: formatDate(row[13]),
+        trainingPeriod: (row[12]&&row[13]) ? formatDate(row[12])+' to '+formatDate(row[13]) : (row[12]?String(row[12]):''),
+        departureDate: formatDate(row[14]),
+        invoiceAmount: String(row[15]||''),
+        miscFees: String(row[16]||''),
+        gstApplicable: String(row[31]||'').toUpperCase() === 'YES',
+        discountApplicable: String(row[32]||'').toUpperCase() === 'YES',
+        discountAmount: String(row[18]||''),
+        accountsNotes: String(row[20]||''),
+        specialNotes: String(row[21]||''),
+        status: String(row[22]||'confirmed'),
+        createdAt: String(row[23]||''),
+        isDraft: String(row[24]||'').toUpperCase() === 'YES',
+        dispatched: String(row[24]||'').toUpperCase() !== 'YES',
+        travellerName: String(row[25]||''),
+        travellerContact: String(row[26]||''),
+        flightNo: String(row[27]||''),
+        flightArrivalTime: String(row[28]||''),
+        terminal: String(row[29]||''),
+        accompanyingStaff: String(row[30]||''),
+        dispatchLog: dispatchLog
+      };
+    });
+    return ContentService.createTextOutput(JSON.stringify({bookings})).setMimeType(ContentService.MimeType.JSON);
+  }
+  return ContentService.createTextOutput(JSON.stringify({error:'unknown action'})).setMimeType(ContentService.MimeType.JSON);
+}
+
+function setupSheet() {
+  const sheet = getSheet();
+  SpreadsheetApp.getUi().alert('Sheet ready! Headers created in the Bookings tab.');
 }`;
-  navigator.clipboard.writeText(s).then(()=>alert('✓ Apps Script code copied to clipboard!\\n\\nNow:\\n1. Go to script.google.com\\n2. Open the \\"Untitled project\\" (May 11)\\n3. Select all the existing code (Ctrl+A) and paste (Ctrl+V)\\n4. Click Save (Ctrl+S)\\n5. Click Deploy → Manage Deployments → Edit (pencil) → New version → Deploy\\n6. The URL stays the same — no need to update Settings'));
+  navigator.clipboard.writeText(s).then(()=>alert('✓ Apps Script code copied to clipboard! (v7 — updated schema)\\n\\nNow:\\n1. Go to script.google.com\\n2. Open your Apps Script project\\n3. Select all existing code (Ctrl+A) and paste (Ctrl+V)\\n4. Click Save (Ctrl+S)\\n5. Click Deploy → Manage Deployments → Edit (pencil) → New version → Deploy\\n6. The URL stays the same — no need to update Settings\\n\\nIMPORTANT: Run setupSheet() once after deploying to add the new header columns.'));
 }
 
 // ===================== TEST EMAIL =====================
@@ -2879,9 +3058,61 @@ function _lhRestoreFields() {
   } catch(e) {}
 }
 
+
+// ─── LEAD HANDOFF DISPATCH ───
+let _lhDispatch = { tc: null, vsf: null, draftId: null }; // {by, at} + draftId for reliable matching
+
+function lhSendTC() {
+  const name   = (document.getElementById('lh-name')||{}).value || '';
+  const phone  = (document.getElementById('lh-phone')||{}).value || '';
+  const prog   = (document.getElementById('lh-prog')||{}).value || '';
+  if (!phone) { alert('Please enter the parent phone number first.'); return; }
+  const isAnnual = prog.toLowerCase().includes('annual');
+  const pdfLink = isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
+  // Build a minimal booking-like object for the message builder
+  const fakeB = { studentName: name, programmeType: prog, phone };
+  const msg = buildThingsToCarryMsg(fakeB, pdfLink);
+  const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+  _lhDispatch.tc = { by: currentUserLabel(), at: nowStamp() };
+  const el = document.getElementById('lh-tc-status');
+  if (el) el.textContent = '✅ Sent by ' + _lhDispatch.tc.by + ' at ' + _lhDispatch.tc.at;
+  // Persist to matching draft booking if exists
+  _lhPersistDispatch();
+}
+
+function lhMarkVSF() {
+  _lhDispatch.vsf = { by: currentUserLabel(), at: nowStamp() };
+  const el = document.getElementById('lh-vsf-status');
+  if (el) el.textContent = '✅ Sent by ' + _lhDispatch.vsf.by + ' at ' + _lhDispatch.vsf.at;
+  _lhPersistDispatch();
+}
+
+function _lhPersistDispatch() {
+  // Match by stored draft ID first; fall back to name+parent if ID not yet set
+  let draft = _lhDispatch.draftId ? bookings.find(b => b.id === _lhDispatch.draftId) : null;
+  if (!draft) {
+    const name   = (document.getElementById('lh-name')||{}).value || '';
+    const parent = (document.getElementById('lh-parent')||{}).value || '';
+    draft = bookings.find(b => b.isDraft && b._handoff && b.studentName === name && b.parentName === parent);
+    if (draft) _lhDispatch.draftId = draft.id; // cache it for subsequent calls
+  }
+  if (draft) {
+    if (!draft.dispatchLog) draft.dispatchLog = {};
+    if (_lhDispatch.tc)  draft.dispatchLog['parent_tc_wa'] = _lhDispatch.tc;
+    if (_lhDispatch.vsf) draft.dispatchLog['parent_vsf']   = _lhDispatch.vsf;
+    saveState();
+    syncToSheets(draft);
+  }
+}
+
 function openLeadHandoff() {
+  _lhDispatch = { tc: null, vsf: null, draftId: null };
   document.getElementById('lead-handoff-modal').style.display = 'flex';
   _lhRestoreFields();
+  // Reset status labels
+  const tcEl = document.getElementById('lh-tc-status'); if(tcEl) tcEl.textContent = 'Not yet sent';
+  const vsfEl = document.getElementById('lh-vsf-status'); if(vsfEl) vsfEl.textContent = 'Not yet sent';
 }
 
 function closeLeadHandoff() {
@@ -2927,9 +3158,12 @@ function sendLeadHandoff() {
 
   // Also save as a draft on the sender's app so it's visible in the dashboard
   const existingHandoff = bookings.find(b => b.isDraft && b._handoff && b.studentName === name && b.parentName === parent);
-  if (!existingHandoff) {
+  if (existingHandoff) {
+    _lhDispatch.draftId = existingHandoff.id; // store ID for reliable dispatch matching
+  } else {
+    const newId = uid();
     const draft = {
-      id: uid(), isDraft: true, _handoff: true,
+      id: newId, isDraft: true, _handoff: true,
       createdAt: new Date().toISOString(),
       studentName: name, parentName: parent,
       age: age||'', gender: gender||'', homeCity: city||'',
@@ -2942,6 +3176,7 @@ function sendLeadHandoff() {
     saveState();
     syncToSheets(draft); // sync handoff draft so all team members see it
     renderDashboard();
+    _lhDispatch.draftId = newId; // store ID for reliable dispatch matching
   }
 }
 
@@ -2964,10 +3199,8 @@ function sendParentBookingLink() {
   const parentFirstName = (parent || 'there').split(' ')[0];
   const msg =
     `Dear ${parentFirstName},\n\n` +
-    `We need a few details to confirm your booking and raise the invoice. ` +
-    `Please click the link and submit the details. ` +
-    `Our admin office will be in touch within 24 hours.\n\n` +
-    `https://www.tsgacademy.in/visiting-students-form.php\n\n` +
+    `Please check your email and fill in the Visiting Student Form that has been sent to you. ` +
+    `This is required to confirm your booking.\n\n` +
     `Warm regards,\nTSG Academy`;
 
   _lhSaveFields();
@@ -3047,6 +3280,392 @@ function checkLeadHandoffParams() {
     window.history.replaceState({}, '', window.location.pathname);
   }, 100);
 }
+
+
+// ===================== DISPATCH LOG =====================
+// dispatchLog structure stored on booking: b.dispatchLog = { 'admin_wa': {by,at}, 'admin_email': {by,at}, ... }
+// Keys: admin_wa, admin_email, ops_wa, ops_email, accounts_wa, accounts_email,
+//       hospitality_wa, hospitality_email, transport_wa,
+//       parent_tc_wa, parent_vsf
+
+function dlKey(recipient, channel) { return recipient + '_' + channel; }
+
+function dlLog(bookingId, recipient, channel) {
+  const b = bookings.find(x => x.id === bookingId);
+  if (!b) return;
+  if (!b.dispatchLog) b.dispatchLog = {};
+  const key = dlKey(recipient, channel);
+  b.dispatchLog[key] = { by: currentUserLabel(), at: nowStamp() };
+  saveState();
+  syncToSheets(b);
+}
+
+function dlGet(b, recipient, channel) {
+  return (b.dispatchLog || {})[dlKey(recipient, channel)] || null;
+}
+
+function dlMarkCall(bookingId, recipient) {
+  dlLog(bookingId, recipient, 'call');
+  renderDispatchTable(bookingId);
+}
+
+function dlMarkVSF(bookingId) {
+  dlLog(bookingId, 'parent', 'vsf');
+  renderDispatchTable(bookingId);
+}
+
+// One-time: mark all dispatch entries as done for students already on campus (arrivalDate <= 2026-06-15)
+function markOnCampusAsDone() {
+  const CUTOFF = '2026-06-15';
+  const ALL_KEYS = ['admin_wa','admin_email','ops_wa','ops_email','accounts_wa','accounts_email',
+    'hospitality_wa','hospitality_email','transport_wa','parent_tc_wa','parent_vsf',
+    'admin_call','ops_call','accounts_call','hospitality_call','transport_call'];
+  const stamp = { by: 'Rokhsar', at: '15 Jun 2026' };
+  let count = 0;
+  bookings.forEach(b => {
+    if (b.isDraft) return;
+    if (!b.arrivalDate || b.arrivalDate > CUTOFF) return;
+    if (!b.dispatchLog) b.dispatchLog = {};
+    ALL_KEYS.forEach(key => { if (!b.dispatchLog[key]) b.dispatchLog[key] = stamp; });
+    saveState();
+    syncToSheets(b);
+    count++;
+  });
+  alert('Done! Marked all dispatch logs as complete for ' + count + ' booking(s) with arrival on or before 15 Jun 2026.');
+  renderDashboard();
+  renderDispatchLog();
+}
+
+// Compute dispatched badge: returns {allDone, done, total, pending[]}
+function computeDispatchStatus(b) {
+  const inc = b.inclusions || [];
+  const hasAirport = inc.includes('Airport Pick-up');
+  const isSingle = (b.programmeType||'').toLowerCase().includes('single session');
+  const dl = b.dispatchLog || {};
+
+  const required = [
+    {key:'admin_wa',           label:'Admin (Vinod) — WA'},
+    {key:'admin_email',        label:'Admin (Vinod) — Email'},
+    {key:'ops_wa',             label:'Ops (Rohit) — WA'},
+    {key:'ops_email',          label:'Ops (Rohit) — Email'},
+    {key:'accounts_wa',        label:'Accounts — WA'},
+    {key:'accounts_email',     label:'Accounts — Email'},
+    {key:'hospitality_wa',     label:'Hospitality — WA'},
+    {key:'hospitality_email',  label:'Hospitality — Email'},
+    {key:'parent_tc_wa',       label:'Parent (Things to Carry) — WA'},
+    {key:'parent_vsf',         label:'Parent (Visiting Student Form)'},
+  ];
+  if (hasAirport) required.push({key:'transport_wa', label:'Transport — WA'});
+
+  const pending = required.filter(r => !dl[r.key]);
+  return {
+    allDone: pending.length === 0,
+    done: required.length - pending.length,
+    total: required.length,
+    pending
+  };
+}
+
+function dispatchBadgeHtml(b) {
+  const s = computeDispatchStatus(b);
+  if (s.allDone) return '<span class="badge badge-done" style="font-size:12px">✅ All Informed</span>';
+  return '<span class="badge" style="background:#fff3cd;color:#856404;font-size:12px;font-weight:700">⚠️ ' + s.pending.length + ' pending</span>';
+}
+
+function renderDispatchTable(bookingId) {
+  const el = document.getElementById('dispatch-table-' + bookingId);
+  if (el) el.innerHTML = buildDispatchTableHtml(bookingId);
+  // Also refresh the dispatch log view entry if open
+  const logEl = document.getElementById('dispatch-table-log-' + bookingId);
+  if (logEl) logEl.innerHTML = buildDispatchTableHtml(bookingId);
+}
+
+function buildDispatchTableHtml(bookingId) {
+  const b = bookings.find(x => x.id === bookingId);
+  if (!b) return '';
+  const inc = b.inclusions || [];
+  const hasAirport = inc.includes('Airport Pick-up');
+  const isSingle = (b.programmeType||'').toLowerCase().includes('single session');
+  const dl = b.dispatchLog || {};
+
+  function entry(recipient, channel, label, sendFn, btnLabel) {
+    const key = dlKey(recipient, channel);
+    const logged = dl[key];
+    if (logged) {
+      return '<td style="padding:6px 8px">'
+        + '<span style="color:#276749;font-size:12px">✅ ' + logged.by + ', ' + logged.at + '</span> '
+        + '<button onclick="' + sendFn + '" style="font-size:10px;padding:2px 7px;border:1px solid #cbd5e0;border-radius:4px;background:#f8fafc;cursor:pointer;margin-left:4px">↩ Again</button>'
+        + '</td>';
+    }
+    return '<td style="padding:6px 8px"><button onclick="' + sendFn + '" style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;background:#276749;color:#fff">' + btnLabel + '</button></td>';
+  }
+
+  function callEntry(recipient) {
+    const key = dlKey(recipient, 'call');
+    const logged = dl[key];
+    if (logged) {
+      return '<td style="padding:6px 8px;font-size:12px;color:#276749">✅ ' + logged.by + ', ' + logged.at + '</td>';
+    }
+    return '<td style="padding:6px 8px"><button onclick="dlMarkCall(\'' + bookingId + '\',\'' + recipient + '\')" style="padding:5px 12px;border-radius:6px;border:1.5px solid #cbd5e0;cursor:pointer;font-size:12px;background:#f8fafc;color:#4a5568">Mark Called</button></td>';
+  }
+
+  const {opsMsg, accountsMsg, hospitalityMsg} = buildMessages(b);
+  const encOps = encodeURIComponent(opsMsg);
+  const encAcc = encodeURIComponent(accountsMsg);
+  const encHosp = encodeURIComponent(hospitalityMsg);
+
+  // WA send functions — these also log
+  function waFn(rec, encMsg, waKey) {
+    return "dispatchWA('" + bookingId + "','" + rec + "','" + waKey + "','" + encMsg + "')";
+  }
+  function emailFn(rec, encMsg, subj) {
+    return "dispatchEmail('" + bookingId + "','" + rec + "','" + encMsg + "','" + subj + "')";
+  }
+
+  const studentName = (b.studentName||'').replace(/'/g, "\'");
+  const subjOps   = 'Arrival Brief — ' + studentName;
+  const subjAcc   = 'Invoice Request — ' + studentName;
+  const subjHosp  = 'Hospitality — ' + studentName;
+
+  const isAnnual = (b.programmeType||'').toLowerCase().includes('annual');
+  const pdfLink = isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
+
+  let rows = '';
+
+  // Admin
+  rows += '<tr style="border-bottom:1px solid #f0f4f8">'
+    + '<td style="padding:6px 8px;font-size:13px;white-space:nowrap">👤 Admin (Vinod)</td>'
+    + entry('admin','wa','WA', waFn('admin',encOps,'admin'), '💬 Send WA')
+    + entry('admin','email','Email', emailFn('admin',encOps,subjOps), '📧 Send Email')
+    + callEntry('admin')
+    + '</tr>';
+
+  // Ops
+  rows += '<tr style="border-bottom:1px solid #f0f4f8">'
+    + '<td style="padding:6px 8px;font-size:13px;white-space:nowrap">📋 Ops (Rohit)</td>'
+    + entry('ops','wa','WA', waFn('ops',encOps,'ops'), '💬 Send WA')
+    + entry('ops','email','Email', emailFn('ops',encOps,subjOps), '📧 Send Email')
+    + callEntry('ops')
+    + '</tr>';
+
+  // Accounts
+  rows += '<tr style="border-bottom:1px solid #f0f4f8">'
+    + '<td style="padding:6px 8px;font-size:13px;white-space:nowrap">🧾 Accounts</td>'
+    + entry('accounts','wa','WA', waFn('accounts',encAcc,'accounts'), '💬 Send WA')
+    + entry('accounts','email','Email', emailFn('accounts',encAcc,subjAcc), '📧 Send Email')
+    + callEntry('accounts')
+    + '</tr>';
+
+  // Hospitality
+  rows += '<tr style="border-bottom:1px solid #f0f4f8">'
+    + '<td style="padding:6px 8px;font-size:13px;white-space:nowrap">🏠 Hospitality</td>'
+    + entry('hospitality','wa','WA', waFn('hospitality',encHosp,'hospitality'), '💬 Send WA')
+    + entry('hospitality','email','Email', emailFn('hospitality',encHosp,subjHosp), '📧 Send Email')
+    + callEntry('hospitality')
+    + '</tr>';
+
+  // Transport (only if airport pickup)
+  if (hasAirport) {
+    rows += '<tr style="border-bottom:1px solid #f0f4f8">'
+      + '<td style="padding:6px 8px;font-size:13px;white-space:nowrap">✈️ Transport</td>'
+      + entry('transport','wa','WA', "dispatchTransportWA('" + bookingId + "')", '💬 Send WA')
+      + '<td></td><td></td>'
+      + '</tr>';
+  }
+
+  // Parent — Things to Carry
+  if (!isSingle) {
+    const encTc = encodeURIComponent(buildThingsToCarryMsg(b, pdfLink));
+    rows += '<tr style="border-bottom:1px solid #f0f4f8;background:#f0fff4">'
+      + '<td style="padding:6px 8px;font-size:13px;white-space:nowrap">📦 Parent — Things to Carry</td>'
+      + entry('parent','tc_wa','WA', "dispatchTCWA('" + bookingId + "')", '💬 Send WA')
+      + '<td style="padding:6px 8px;font-size:11px;color:#718096">WA only</td>'
+      + '<td></td>'
+      + '</tr>';
+  }
+
+  // Parent — Visiting Student Form
+  rows += '<tr style="background:#f0fff4">'
+    + '<td style="padding:6px 8px;font-size:13px;white-space:nowrap">📋 Parent — Visiting Student Form</td>'
+    + '<td style="padding:6px 8px">'
+    + (dl['parent_vsf']
+        ? '<span style="color:#276749;font-size:12px">✅ ' + dl['parent_vsf'].by + ', ' + dl['parent_vsf'].at + '</span> '
+          + '<a href="https://www.tsgacademy.in/admin/index.php" target="_blank" style="font-size:10px;padding:2px 7px;border:1px solid #cbd5e0;border-radius:4px;background:#f8fafc;cursor:pointer;margin-left:4px;text-decoration:none;color:#4a5568">↩ Portal</a>'
+        : '<button onclick="dispatchVSFWA(\'' + bookingId + '\')" style="padding:5px 12px;border-radius:6px;border:none;font-size:12px;font-weight:600;background:#7c3aed;color:#fff;margin-right:6px">💬 Send WA</button>'
+          + '<button onclick="dlMarkVSF(\'' + bookingId + '\')" style="padding:5px 12px;border-radius:6px;border:1.5px solid #276749;cursor:pointer;font-size:12px;font-weight:600;background:#f0fff4;color:#276749">✓ Mark as Sent</button>')
+    + '</td>'
+    + '<td colspan="2"></td>'
+    + '</tr>';
+
+  const status = computeDispatchStatus(b);
+  const statusBar = status.allDone
+    ? '<div style="background:#f0fff4;border:1.5px solid #9ae6b4;border-radius:8px;padding:10px 14px;margin-bottom:12px;color:#276749;font-weight:600;font-size:13px">✅ All communications complete</div>'
+    : '<div style="background:#fff3cd;border:1.5px solid #fbbf24;border-radius:8px;padding:10px 14px;margin-bottom:12px;color:#856404;font-size:13px"><strong>⚠️ ' + status.pending.length + ' pending:</strong> ' + status.pending.map(p=>p.label).join(' · ') + '</div>';
+
+  return statusBar
+    + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr style="background:#f7fafc;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#4a5568">'
+    + '<th style="padding:6px 8px;text-align:left">Recipient</th>'
+    + '<th style="padding:6px 8px;text-align:left">WhatsApp</th>'
+    + '<th style="padding:6px 8px;text-align:left">Email</th>'
+    + '<th style="padding:6px 8px;text-align:left">Call (optional)</th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody></table></div>';
+}
+
+// Dispatch send helpers that auto-log
+function dispatchWA(bookingId, recipient, waKey, encMsg) {
+  const b = bookings.find(x => x.id === bookingId);
+  if (!b) return;
+  const msg = decodeURIComponent(encMsg);
+  const numMap = {admin: settings.waAdmin, ops: settings.waOps, accounts: settings.waAccounts, hospitality: settings.waHospitality, transport: settings.waTransport};
+  const num = numMap[waKey] || numMap[recipient] || '';
+  const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+  dlLog(bookingId, recipient, 'wa');
+  renderDispatchTable(bookingId);
+  renderDashboard();
+}
+
+function dispatchEmail(bookingId, recipient, encMsg, subj) {
+  const b = bookings.find(x => x.id === bookingId);
+  if (!b) return;
+  const msg = decodeURIComponent(encMsg);
+  sendEmailMsg(recipient, encodeURIComponent(msg), subj, b);
+  dlLog(bookingId, recipient, 'email');
+  renderDispatchTable(bookingId);
+  renderDashboard();
+}
+
+function dispatchTransportWA(bookingId) {
+  const b = bookings.find(x => x.id === bookingId);
+  if (!b) return;
+  const msg = buildTravelMsg(b);
+  const num = settings.waTransport || '';
+  const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+  dlLog(bookingId, 'transport', 'wa');
+  renderDispatchTable(bookingId);
+  renderDashboard();
+}
+
+function dispatchTCWA(bookingId) {
+  const b = bookings.find(x => x.id === bookingId);
+  if (!b) return;
+  const isAnnual = (b.programmeType||'').toLowerCase().includes('annual');
+  const pdfLink = isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
+  const msg = buildThingsToCarryMsg(b, pdfLink);
+  const num = b.phone || '';
+  const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+  dlLog(bookingId, 'parent', 'tc_wa');
+  renderDispatchTable(bookingId);
+  renderDashboard();
+}
+
+
+function dispatchVSFWA(bookingId) {
+  const b = bookings.find(x => x.id === bookingId);
+  if (!b) return;
+  const parentFirstName = ((b.parentName||'there').split(' ')[0]);
+  const msg =
+    `Dear ${parentFirstName},\n\n` +
+    `Please check your email and fill in the Visiting Student Form that has been sent to you. ` +
+    `This is required to confirm your booking.\n\n` +
+    `Warm regards,\nTSG Academy`;
+  const num = b.phone || '';
+  const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+  dlMarkVSF(bookingId);
+}
+
+// ===================== DISPATCH LOG =====================
+function renderDispatchLog() {
+  const el = document.getElementById('dispatch-log-list');
+  if (!el) return;
+  const live = bookings.filter(b => !b.isDraft).sort((a,b) => (a.arrivalDate||'').localeCompare(b.arrivalDate||''));
+  if (!live.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No bookings yet.</p></div>';
+    return;
+  }
+  el.innerHTML = live.map(b => {
+    const status = computeDispatchStatus(b);
+    const badgeHtml = status.allDone
+      ? '<span style="background:#f0fff4;color:#276749;font-size:12px;font-weight:700;padding:3px 10px;border-radius:10px;border:1px solid #9ae6b4">✅ All Informed</span>'
+      : '<span style="background:#fff3cd;color:#856404;font-size:12px;font-weight:700;padding:3px 10px;border-radius:10px;border:1px solid #fbbf24">⚠️ ' + status.pending.length + ' pending</span>';
+    return '<div class="card" style="margin-bottom:16px">'
+      + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">'
+      + '<div style="flex:1"><div style="font-size:15px;font-weight:700">' + (b.studentName||'—') + '</div>'
+      + '<div style="font-size:12px;color:#718096">' + (b.programmeType||'') + ' · Arrival: ' + fmtDateShort(b.arrivalDate) + '</div></div>'
+      + badgeHtml
+      + '<button class="btn btn-sm btn-secondary" onclick="viewBooking(\'' + b.id + '\')">👁 Open</button>'
+      + '</div>'
+      + '<div id="dispatch-table-log-' + b.id + '">' + buildDispatchTableHtml(b.id) + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+// ===================== REVENUE NAV =====================
+function showRevenue(el) {
+  if (currentUser !== 'Rokhsar') return;
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('section-revenue').classList.add('active');
+  if (el) el.classList.add('active');
+  renderRevenue();
+}
+
+// ===================== USER LOGIN =====================
+function onLoginUserChange() {
+  const user = document.getElementById('login-user-select').value;
+  const pwRow = document.getElementById('login-password-row');
+  const err = document.getElementById('login-error');
+  if (err) err.style.display = 'none';
+  pwRow.style.display = (user === 'Rokhsar') ? 'block' : 'none';
+  if (user !== 'Rokhsar') {
+    const inp = document.getElementById('login-password-input');
+    if (inp) inp.value = '';
+  }
+}
+
+// SHA-256 hash of the Rokhsar password (never store plaintext)
+// To regenerate: crypto.subtle.digest('SHA-256', new TextEncoder().encode('yourpassword'))
+//   then convert to hex. Current hash is for the configured password.
+const _PW_HASH = '930c728c6f4c346469bbbc651bef953ddde1c64e3bb3dc661d9ed605fefb9069';
+
+async function _hashPw(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function doLogin() {
+  const user = document.getElementById('login-user-select').value;
+  const err = document.getElementById('login-error');
+  if (!user) return;
+  if (user === 'Rokhsar') {
+    const pw = (document.getElementById('login-password-input')||{}).value || '';
+    const hash = await _hashPw(pw);
+    if (hash !== _PW_HASH) {
+      if (err) { err.textContent = 'Incorrect password. Please try again.'; err.style.display = 'block'; }
+      return;
+    }
+  }
+  currentUser = user;
+  document.getElementById('login-overlay').style.display = 'none';
+  // Show/hide revenue nav item based on user
+  const revNav = document.getElementById('nav-revenue');
+  if (revNav) revNav.style.display = (user === 'Rokhsar') ? 'flex' : 'none';
+  renderDashboard();
+}
+
+function currentUserLabel() {
+  return currentUser || 'Unknown';
+}
+
+function nowStamp() {
+  return new Date().toLocaleString('en-IN', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
 </script>
 </body>
 </html>
