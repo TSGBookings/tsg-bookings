@@ -1667,6 +1667,12 @@ function _revenueCategory(progType) {
   return 'visiting'; // 1 week, 1 month, weekly, monthly, boot camp, etc.
 }
 
+function toggleRevDrill(monthKey) {
+  const rows = document.querySelectorAll('.rev-drill-' + monthKey);
+  const isHidden = rows.length && rows[0].style.display === 'none';
+  rows.forEach(r => r.style.display = isHidden ? 'table-row' : 'none');
+}
+
 function renderRevenue() {
   const liveBookings = bookings.filter(b => !b.isDraft && b.arrivalDate);
   const byMonth = {};
@@ -1700,16 +1706,44 @@ function renderRevenue() {
   const grandTotal = totals.visiting + totals.annual + totals.single;
   if (totalEl) totalEl.textContent = 'Grand Total: ₹' + grandTotal.toLocaleString('en-IN');
   const fmt = v => v > 0 ? '₹' + v.toLocaleString('en-IN') : '<span style="color:#cbd5e0">—</span>';
+  // Build per-month booking breakdown for drilldown
+  const byMonthBookings = {};
+  liveBookings.forEach(b => {
+    const key = b.arrivalDate.slice(0, 7);
+    if (!byMonthBookings[key]) byMonthBookings[key] = [];
+    byMonthBookings[key].push(b);
+  });
+
   tbody.innerHTML = months.map((key, i) => {
     const d = new Date(key + '-01T00:00:00');
     const label = d.toLocaleDateString('en-IN', {month: 'long', year: 'numeric'});
-    return '<tr style="border-bottom:1px solid #f0f4f8' + (i===0?';background:#f0fff4':'') + '">'
-      + '<td style="padding:8px 12px;font-weight:' + (i===0?'600':'400') + '">' + label + '</td>'
+    const monthBks = byMonthBookings[key] || [];
+    // Build drilldown rows grouped by category
+    const drillRows = ['visiting','annual','single'].map(cat => {
+      const catLabel = cat==='visiting'?'Visiting':cat==='annual'?'Annual':'Sessions';
+      const catColor = cat==='visiting'?'#276749':cat==='annual'?'#7c3aed':'#b45309';
+      const bks = monthBks.filter(b => _revenueCategory(b.programmeType) === cat);
+      if (!bks.length) return '';
+      return bks.map(b => {
+        const {total} = calcInvoice(b);
+        return '<tr class="rev-drill-' + key.replace('-','') + '" style="display:none;background:#fafafa">'
+          + '<td style="padding:4px 12px 4px 28px;font-size:12px;color:#4a5568">↳ ' + (b.studentName||'—') + ' <span style="color:#718096">(' + (b.programmeType||'—') + ')</span></td>'
+          + '<td></td>'
+          + '<td style="padding:4px 12px;text-align:right;font-size:12px;color:' + (cat==='visiting'?catColor:'#cbd5e0') + '">' + (cat==='visiting'?'₹'+total.toLocaleString('en-IN'):'') + '</td>'
+          + '<td style="padding:4px 12px;text-align:right;font-size:12px;color:' + (cat==='annual'?catColor:'#cbd5e0') + '">' + (cat==='annual'?'₹'+total.toLocaleString('en-IN'):'') + '</td>'
+          + '<td style="padding:4px 12px;text-align:right;font-size:12px;color:' + (cat==='single'?catColor:'#cbd5e0') + '">' + (cat==='single'?'₹'+total.toLocaleString('en-IN'):'') + '</td>'
+          + '</tr>';
+      }).join('');
+    }).join('');
+
+    const summaryRow = '<tr style="border-bottom:1px solid #f0f4f8' + (i===0?';background:#f0fff4':'') + ';cursor:pointer" onclick="toggleRevDrill(\'' + key.replace('-','') + '\')">'
+      + '<td style="padding:8px 12px;font-weight:' + (i===0?'600':'400') + '">' + label + ' <span style="font-size:11px;color:#a0aec0">▸</span></td>'
       + '<td style="padding:8px 12px;text-align:right;color:#718096">' + byMonth[key].count + '</td>'
       + '<td style="padding:8px 12px;text-align:right;color:#276749">' + fmt(byMonth[key].visiting) + '</td>'
       + '<td style="padding:8px 12px;text-align:right;color:#7c3aed">' + fmt(byMonth[key].annual) + '</td>'
       + '<td style="padding:8px 12px;text-align:right;color:#b45309">' + fmt(byMonth[key].single) + '</td>'
       + '</tr>';
+    return summaryRow + drillRows;
   }).join('')
   + '<tr style="border-top:2px solid #e2e8f0;background:#f8fafb;font-weight:700">'
   + '<td style="padding:8px 12px">Total</td>'
