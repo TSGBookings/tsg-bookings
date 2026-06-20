@@ -1483,6 +1483,7 @@ async function loadFromSheet() {
     const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id));
     bookings = [...mergedSheetBookings, ...localDrafts];
     applyInvoiceCorrections();
+    _dlMergeIntoBookings(); // restore any locally-logged dispatch entries
     // Save clean sheet data to localStorage
     localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
     renderDashboard();
@@ -3365,12 +3366,37 @@ function safeOpenLink(url) {
   document.body.removeChild(a);
 }
 
+// Dispatch logs are stored in a dedicated localStorage key so they are NEVER
+// wiped by a loadFromSheet() call. _dlStore() reads/writes this store.
+function _dlStore(write, bookingId, key, value) {
+  const store = JSON.parse(localStorage.getItem('golf_dl_v1') || '{}');
+  if (write) {
+    if (!store[bookingId]) store[bookingId] = {};
+    store[bookingId][key] = value;
+    localStorage.setItem('golf_dl_v1', JSON.stringify(store));
+  }
+  return store;
+}
+
+// Merge the local dispatch log store into the in-memory bookings array.
+// Call this before any render that reads dispatchLog.
+function _dlMergeIntoBookings() {
+  const store = JSON.parse(localStorage.getItem('golf_dl_v1') || '{}');
+  bookings.forEach(b => {
+    if (!store[b.id]) return;
+    b.dispatchLog = Object.assign({}, b.dispatchLog || {}, store[b.id]);
+  });
+}
+
 function dlLog(bookingId, recipient, channel) {
   const b = bookings.find(x => x.id === bookingId);
   if (!b) return;
   if (!b.dispatchLog) b.dispatchLog = {};
   const key = dlKey(recipient, channel);
-  b.dispatchLog[key] = { by: currentUserLabel(), at: nowStamp() };
+  const entry = { by: currentUserLabel(), at: nowStamp() };
+  b.dispatchLog[key] = entry;
+  // Persist to dedicated store — survives loadFromSheet() overwrites
+  _dlStore(true, bookingId, key, entry);
   saveState();
   syncToSheets(b);
 }
@@ -3688,6 +3714,7 @@ function dispatchVSFWA(bookingId) {
 function renderDispatchLog() {
   const el = document.getElementById('dispatch-log-list');
   if (!el) return;
+  _dlMergeIntoBookings(); // always restore local dispatch logs before rendering
   const live = bookings.filter(b => !b.isDraft).sort((a,b) => (a.arrivalDate||'').localeCompare(b.arrivalDate||''));
   if (!live.length) {
     el.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No bookings yet.</p></div>';
