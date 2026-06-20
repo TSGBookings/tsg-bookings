@@ -1682,7 +1682,9 @@ function renderRevenue() {
     const cat = _revenueCategory(b.programmeType);
     if (!byMonth[key]) byMonth[key] = {count:0, visiting:0, annual:0, single:0};
     byMonth[key].count++;
-    byMonth[key][cat] += calcInvoice(b).total; // use total (fee + misc + GST - discount)
+    const inv = calcInvoice(b);
+    // Programme fee only: base - discount (excl. misc and GST)
+    byMonth[key][cat] += inv.netFee;
   });
   const months = Object.keys(byMonth).sort().reverse();
   const tbody = document.getElementById('revenue-tbody');
