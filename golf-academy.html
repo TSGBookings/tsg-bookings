@@ -2519,7 +2519,7 @@ function sendTravelWA(id) {
   const msg = buildTravelMsg(b);
   const num = settings.waTransport || '';
   const url = num ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-  window.open(url, '_blank');
+  safeOpenLink(url);
 }
 
 function saveTravelDetails(id) {
@@ -2545,7 +2545,7 @@ function sendTCWhatsApp() {
   const msg = b ? buildThingsToCarryMsg(b, pdfLink) : (window._tcMsg || '');
   const num = window._tcPhone || '';
   const url = num ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-  window.open(url, '_blank');
+  safeOpenLink(url);
 }
 
 function sendTCEmail(studentName, bookingId) {
@@ -2561,18 +2561,18 @@ function openWAWithMsg(encodedMsg, team, phone) {
   if (team==='admin') {
     const num=settings.waAdmin;
     const url=num?`https://wa.me/${num}?text=${encoded}`:`https://wa.me/?text=${encoded}`;
-    window.open(url,'_blank');
+    safeOpenLink(url);
     return;
   }
   if (team==='ops') {
     const num=settings.waOps;
     const url=num?`https://wa.me/${num}?text=${encoded}`:`https://wa.me/?text=${encoded}`;
-    window.open(url,'_blank');
+    safeOpenLink(url);
     return;
   }
   const num = team==='accounts'?settings.waAccounts : team==='hospitality'?settings.waHospitality : team==='transport'?settings.waTransport : phone||'';
   const url=num?`https://wa.me/${num}?text=${encoded}`:`https://wa.me/?text=${encoded}`;
-  window.open(url,'_blank');
+  safeOpenLink(url);
 }
 
 function markDoneFromModal(bookingId,type){markDone(bookingId,type);closeModal();setTimeout(()=>viewBooking(bookingId),100);}
@@ -2645,7 +2645,7 @@ Reply here or call us. See you tomorrow! ⛳`
   const msg=msgs[type]||'';
   const num=b.phone||'';
   const url=num?`https://wa.me/${num}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
-  window.open(url,'_blank');
+  safeOpenLink(url);
 }
 
 function sendReminderEmail(bookingId, type) {
@@ -3073,7 +3073,7 @@ function lhSendTC() {
   const fakeB = { studentName: name, programmeType: prog, phone };
   const msg = buildThingsToCarryMsg(fakeB, pdfLink);
   const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
-  window.open(url, '_blank');
+  safeOpenLink(url);
   _lhDispatch.tc = { by: currentUserLabel(), at: nowStamp() };
   const el = document.getElementById('lh-tc-status');
   if (el) el.textContent = '✅ Sent by ' + _lhDispatch.tc.by + ' at ' + _lhDispatch.tc.at;
@@ -3153,7 +3153,7 @@ function sendLeadHandoff() {
   // Save fields to localStorage so they survive PWA suspension on iOS/Android
   _lhSaveFields();
   // Opens WhatsApp with message pre-filled — select TSG Booking group manually
-  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  safeOpenLink(`https://wa.me/?text=${encodeURIComponent(msg)}`);
   document.getElementById('lh-status').textContent = '✓ WhatsApp opened — select TSG Booking group to send';
 
   // Also save as a draft on the sender's app so it's visible in the dashboard
@@ -3204,7 +3204,7 @@ function sendParentBookingLink() {
     `Warm regards,\nTSG Academy`;
 
   _lhSaveFields();
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+  safeOpenLink(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`);
   document.getElementById('lh-status').textContent = '✓ WhatsApp opened for parent';
 }
 
@@ -3290,6 +3290,17 @@ function checkLeadHandoffParams() {
 
 function dlKey(recipient, channel) { return recipient + '_' + channel; }
 
+// Safe link opener — bypasses popup blockers that block window.open()
+function safeOpenLink(url) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 function dlLog(bookingId, recipient, channel) {
   const b = bookings.find(x => x.id === bookingId);
   if (!b) return;
@@ -3307,11 +3318,13 @@ function dlGet(b, recipient, channel) {
 function dlMarkCall(bookingId, recipient) {
   dlLog(bookingId, recipient, 'call');
   renderDispatchTable(bookingId);
+  _showSyncToast('✓ Call logged for ' + recipient);
 }
 
 function dlMarkVSF(bookingId) {
   dlLog(bookingId, 'parent', 'vsf');
   renderDispatchTable(bookingId);
+  _showSyncToast('✓ Visiting Student Form marked as sent');
 }
 
 // One-time: mark all dispatch entries as done for students already on campus (arrivalDate <= 2026-06-15)
@@ -3410,9 +3423,10 @@ function buildDispatchTableHtml(bookingId) {
   }
 
   const {opsMsg, accountsMsg, hospitalityMsg} = buildMessages(b);
-  const encOps = encodeURIComponent(opsMsg);
-  const encAcc = encodeURIComponent(accountsMsg);
-  const encHosp = encodeURIComponent(hospitalityMsg);
+  // encodeURIComponent doesn't encode ' — replace manually to avoid breaking onclick attributes
+  const encOps = encodeURIComponent(opsMsg).replace(/'/g, '%27');
+  const encAcc = encodeURIComponent(accountsMsg).replace(/'/g, '%27');
+  const encHosp = hospitalityMsg ? encodeURIComponent(hospitalityMsg).replace(/'/g, '%27') : '';
 
   // WA send functions — these also log
   function waFn(rec, encMsg, waKey) {
@@ -3515,68 +3529,80 @@ function buildDispatchTableHtml(bookingId) {
 
 // Dispatch send helpers that auto-log
 function dispatchWA(bookingId, recipient, waKey, encMsg) {
-  const b = bookings.find(x => x.id === bookingId);
-  if (!b) return;
-  const msg = decodeURIComponent(encMsg);
-  const numMap = {admin: settings.waAdmin, ops: settings.waOps, accounts: settings.waAccounts, hospitality: settings.waHospitality, transport: settings.waTransport};
-  const num = numMap[waKey] || numMap[recipient] || '';
-  const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
-  window.open(url, '_blank');
-  dlLog(bookingId, recipient, 'wa');
-  renderDispatchTable(bookingId);
-  renderDashboard();
+  try {
+    const b = bookings.find(x => x.id === bookingId);
+    if (!b) { _showSyncToast('Booking not found — try refreshing.', true); return; }
+    const msg = decodeURIComponent(encMsg);
+    const numMap = {admin: settings.waAdmin, ops: settings.waOps, accounts: settings.waAccounts, hospitality: settings.waHospitality, transport: settings.waTransport};
+    const num = numMap[waKey] || numMap[recipient] || '';
+    const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
+    safeOpenLink(url);
+    dlLog(bookingId, recipient, 'wa');
+    renderDispatchTable(bookingId);
+    renderDashboard();
+    _showSyncToast('✓ WhatsApp opened & logged');
+  } catch(e) { _showSyncToast('Error: ' + e.message, true); console.error('dispatchWA error:', e); }
 }
 
 function dispatchEmail(bookingId, recipient, encMsg, subj) {
-  const b = bookings.find(x => x.id === bookingId);
-  if (!b) return;
-  const msg = decodeURIComponent(encMsg);
-  sendEmailMsg(recipient, encodeURIComponent(msg), subj, b);
-  dlLog(bookingId, recipient, 'email');
-  renderDispatchTable(bookingId);
-  renderDashboard();
+  try {
+    const b = bookings.find(x => x.id === bookingId);
+    if (!b) { _showSyncToast('Booking not found — try refreshing.', true); return; }
+    const msg = decodeURIComponent(encMsg);
+    sendEmailMsg(recipient, encodeURIComponent(msg), subj, b);
+    dlLog(bookingId, recipient, 'email');
+    renderDispatchTable(bookingId);
+    renderDashboard();
+  } catch(e) { _showSyncToast('Error: ' + e.message, true); console.error('dispatchEmail error:', e); }
 }
 
 function dispatchTransportWA(bookingId) {
-  const b = bookings.find(x => x.id === bookingId);
-  if (!b) return;
-  const msg = buildTravelMsg(b);
-  const num = settings.waTransport || '';
-  const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
-  window.open(url, '_blank');
-  dlLog(bookingId, 'transport', 'wa');
-  renderDispatchTable(bookingId);
-  renderDashboard();
+  try {
+    const b = bookings.find(x => x.id === bookingId);
+    if (!b) { _showSyncToast('Booking not found — try refreshing.', true); return; }
+    const msg = buildTravelMsg(b);
+    const num = settings.waTransport || '';
+    const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
+    safeOpenLink(url);
+    dlLog(bookingId, 'transport', 'wa');
+    renderDispatchTable(bookingId);
+    renderDashboard();
+    _showSyncToast('✓ Transport WA opened & logged');
+  } catch(e) { _showSyncToast('Error: ' + e.message, true); console.error('dispatchTransportWA error:', e); }
 }
 
 function dispatchTCWA(bookingId) {
-  const b = bookings.find(x => x.id === bookingId);
-  if (!b) return;
-  const isAnnual = (b.programmeType||'').toLowerCase().includes('annual');
-  const pdfLink = isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
-  const msg = buildThingsToCarryMsg(b, pdfLink);
-  const num = b.phone || '';
-  const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
-  window.open(url, '_blank');
-  dlLog(bookingId, 'parent', 'tc_wa');
-  renderDispatchTable(bookingId);
-  renderDashboard();
+  try {
+    const b = bookings.find(x => x.id === bookingId);
+    if (!b) { _showSyncToast('Booking not found — try refreshing.', true); return; }
+    const isAnnual = (b.programmeType||'').toLowerCase().includes('annual');
+    const pdfLink = isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
+    const msg = buildThingsToCarryMsg(b, pdfLink);
+    const num = b.phone || '';
+    const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
+    safeOpenLink(url);
+    dlLog(bookingId, 'parent', 'tc_wa');
+    renderDispatchTable(bookingId);
+    renderDashboard();
+    _showSyncToast('✓ Things to Carry WA opened & logged');
+  } catch(e) { _showSyncToast('Error: ' + e.message, true); console.error('dispatchTCWA error:', e); }
 }
 
-
 function dispatchVSFWA(bookingId) {
-  const b = bookings.find(x => x.id === bookingId);
-  if (!b) return;
-  const parentFirstName = ((b.parentName||'there').split(' ')[0]);
-  const msg =
-    `Dear ${parentFirstName},\n\n` +
-    `Please check your email and fill in the Visiting Student Form that has been sent to you. ` +
-    `This is required to confirm your booking.\n\n` +
-    `Warm regards,\nTSG Academy`;
-  const num = b.phone || '';
-  const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
-  window.open(url, '_blank');
-  dlMarkVSF(bookingId);
+  try {
+    const b = bookings.find(x => x.id === bookingId);
+    if (!b) { _showSyncToast('Booking not found — try refreshing.', true); return; }
+    const parentFirstName = ((b.parentName||'there').split(' ')[0]);
+    const msg =
+      `Dear ${parentFirstName},\n\n` +
+      `Please check your email and fill in the Visiting Student Form that has been sent to you. ` +
+      `This is required to confirm your booking.\n\n` +
+      `Warm regards,\nTSG Academy`;
+    const num = b.phone || '';
+    const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
+    safeOpenLink(url);
+    dlMarkVSF(bookingId);
+  } catch(e) { _showSyncToast('Error: ' + e.message, true); console.error('dispatchVSFWA error:', e); }
 }
 
 // ===================== DISPATCH LOG =====================
