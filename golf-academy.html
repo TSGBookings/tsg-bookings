@@ -3426,7 +3426,10 @@ function dlMarkAllSent(bookingId) {
   if (status.allDone) { _showSyncToast('All already marked as sent'); return; }
   if (!b.dispatchLog) b.dispatchLog = {};
   const stamp = { by: currentUserLabel(), at: nowStamp() };
-  status.pending.forEach(item => { b.dispatchLog[item.key] = stamp; });
+  status.pending.forEach(item => {
+    b.dispatchLog[item.key] = stamp;
+    _dlStore(true, bookingId, item.key, stamp);
+  });
   saveState();
   syncToSheets(b);
   renderDispatchLog();
