@@ -1464,10 +1464,19 @@ async function loadFromSheet() {
     if (!resp.ok) { console.warn('Sheet load failed:', resp.status); return; }
     const data = await resp.json();
     if (!data.bookings || !Array.isArray(data.bookings)) return;
-    // Merge: sheet data is authoritative; keep any local drafts not yet synced to sheet
+    // Preserve local dispatch log entries that haven't reached the sheet yet.
+    // The sheet POST (no-cors) can take a few seconds to process; a refresh in that
+    // window would otherwise wipe locally-made changes. We take the union of both logs.
+    const localSnapshot = bookings;
+    const mergedSheetBookings = data.bookings.map(sheetB => {
+      const localB = localSnapshot.find(lb => lb.id === sheetB.id);
+      if (!localB || !localB.dispatchLog || !Object.keys(localB.dispatchLog).length) return sheetB;
+      const mergedLog = Object.assign({}, sheetB.dispatchLog || {}, localB.dispatchLog);
+      return Object.assign({}, sheetB, { dispatchLog: mergedLog });
+    });
+    // Keep any local drafts not yet synced to sheet
     const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id));
-    // data.bookings already includes sheet-stored drafts (isDraft:true rows from sheet)
-    bookings = [...data.bookings, ...localDrafts];
+    bookings = [...mergedSheetBookings, ...localDrafts];
     applyInvoiceCorrections();
     // Save clean sheet data to localStorage
     localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
