@@ -1492,7 +1492,7 @@ async function loadFromSheet() {
     // Sheet failed — fall back to localStorage
     console.warn('Sheet load failed, using local cache:', e.message);
     const saved = localStorage.getItem('golf_bookings_v5');
-    if (saved) { bookings = JSON.parse(saved); renderDashboard(); }
+    if (saved) { bookings = JSON.parse(saved); _dlMergeIntoBookings(); renderDashboard(); }
   }
 }
 
@@ -1728,7 +1728,7 @@ function renderRevenue() {
       const bks = monthBks.filter(b => _revenueCategory(b.programmeType) === cat);
       if (!bks.length) return '';
       return bks.map(b => {
-        const {total} = calcInvoice(b);
+        const {netFee: total} = calcInvoice(b);
         return '<tr class="rev-drill-' + key.replace('-','') + '" style="display:none;background:#fafafa">'
           + '<td style="padding:4px 12px 4px 28px;font-size:12px;color:#4a5568">↳ ' + (b.studentName||'—') + ' <span style="color:#718096">(' + (b.programmeType||'—') + ')</span></td>'
           + '<td></td>'
