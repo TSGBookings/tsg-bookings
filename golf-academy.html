@@ -1292,7 +1292,12 @@ const ALUMNI_HISTORICAL = [
 ].map(function(r){return {studentName:r[0],parentName:r[1],phone:r[2],email:r[3],homeCity:r[4],programmeType:r[5],monthOfVisit:r[6],type:r[7],_historical:true};});
 
 function getAlumniRecords() {
-  var appRecords = bookings.filter(function(b){return !b.isDraft;}).map(function(b){
+  var today = new Date().toISOString().split('T')[0];
+  var appRecords = bookings.filter(function(b){
+    if (b.isDraft) return false;
+    var endDate = b.trainingEndDate || b.departureDate || '';
+    return endDate && endDate <= today;
+  }).map(function(b){
     var mon = '';
     if(b.arrivalDate){var d=new Date(b.arrivalDate+'T00:00:00');mon=d.toLocaleDateString('en-IN',{month:'short',year:'numeric'});}
     return {studentName:b.studentName||'',parentName:b.parentName||'',phone:b.phone||'',email:b.email||'',homeCity:b.homeCity||'',programmeType:b.programmeType||'',monthOfVisit:mon,type:'app',_historical:false};
@@ -1551,7 +1556,10 @@ async function sendEmail(toEmail, toName, subject, body, booking) {
   }
 }
 
-function saveState() { localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings)); }
+function saveState() {
+  localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
+  window._lastWriteTime = Date.now(); // used by auto-refresh cooldown
+}
 
 function applySettingsToUI() {
   const map = {'waAdmin':'s-wa-admin','waOps':'s-wa-ops','waAccounts':'s-wa-accounts','waHospitality':'s-wa-hospitality','waTransport':'s-wa-transport',
@@ -3724,6 +3732,9 @@ async function doLogin() {
   if (settings.sheetUrl && !window._syncInterval) {
     window._syncInterval = setInterval(async () => {
       if (document.querySelector('.modal-overlay.open')) return;
+      // Skip refresh if a local write happened in the last 30 seconds — avoids
+      // overwriting dispatch log changes before the sheet POST has been processed
+      if (window._lastWriteTime && (Date.now() - window._lastWriteTime) < 30000) return;
       await loadFromSheet();
       const active = document.querySelector('.section.active');
       if (!active) return;
