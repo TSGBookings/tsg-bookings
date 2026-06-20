@@ -2380,7 +2380,6 @@ Dear ${b.parentName},
 ${b.studentName}'s *${b.programmeType}* programme begins on *${trainingStart}*. Please find the complete packing list${pdfLink?' at the link below':' attached'}.
 ${pdfLink?'\n📎 Packing List: '+pdfLink:''}
 ${hasAirport?'\n✈️ *Airport Pick-up:* Arranged — our team will meet you at arrivals. No need to book a cab.':''}
-${b.specialNotes?'\n⚠️ *Special Note:* '+b.specialNotes:''}
 ━━━━━━━━━━━━━━━━━━━━
 Looking forward to welcoming ${b.studentName} to TSG! ⛳`;
 }
@@ -3069,8 +3068,9 @@ function lhSendTC() {
   if (!phone) { alert('Please enter the parent phone number first.'); return; }
   const isAnnual = prog.toLowerCase().includes('annual');
   const pdfLink = isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
+  const parent = (document.getElementById('lh-parent')||{}).value || '';
   // Build a minimal booking-like object for the message builder
-  const fakeB = { studentName: name, programmeType: prog, phone };
+  const fakeB = { studentName: name, parentName: parent, programmeType: prog, phone };
   const msg = buildThingsToCarryMsg(fakeB, pdfLink);
   const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
   safeOpenLink(url);
@@ -3118,6 +3118,19 @@ function openLeadHandoff() {
 function closeLeadHandoff() {
   document.getElementById('lead-handoff-modal').style.display = 'none';
   document.getElementById('lh-status').textContent = '';
+  // Clear all fields and saved draft so the form is fresh next time
+  ['lh-name','lh-age','lh-city','lh-parent','lh-phone','lh-email','lh-notes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const genderEl = document.getElementById('lh-gender');
+  if (genderEl) genderEl.value = '';
+  const progEl = document.getElementById('lh-prog');
+  if (progEl) progEl.value = '';
+  const tcEl = document.getElementById('lh-tc-status'); if (tcEl) tcEl.textContent = 'Not yet sent';
+  const vsfEl = document.getElementById('lh-vsf-status'); if (vsfEl) vsfEl.textContent = 'Not yet sent';
+  localStorage.removeItem('lh_draft');
+  _lhDispatch = { tc: null, vsf: null, draftId: null };
 }
 
 function sendLeadHandoff() {
@@ -3325,6 +3338,21 @@ function dlMarkVSF(bookingId) {
   dlLog(bookingId, 'parent', 'vsf');
   renderDispatchTable(bookingId);
   _showSyncToast('✓ Visiting Student Form marked as sent');
+}
+
+function dlMarkAllSent(bookingId) {
+  const b = bookings.find(x => x.id === bookingId);
+  if (!b) return;
+  const status = computeDispatchStatus(b);
+  if (status.allDone) { _showSyncToast('All already marked as sent'); return; }
+  if (!b.dispatchLog) b.dispatchLog = {};
+  const stamp = { by: currentUserLabel(), at: nowStamp() };
+  status.pending.forEach(item => { b.dispatchLog[item.key] = stamp; });
+  saveState();
+  syncToSheets(b);
+  renderDispatchLog();
+  renderDashboard();
+  _showSyncToast('✓ All ' + status.pending.length + ' items marked as sent for ' + (b.studentName || ''));
 }
 
 // One-time: mark all dispatch entries as done for students already on campus (arrivalDate <= 2026-06-15)
@@ -3624,6 +3652,7 @@ function renderDispatchLog() {
       + '<div style="flex:1"><div style="font-size:15px;font-weight:700">' + (b.studentName||'—') + '</div>'
       + '<div style="font-size:12px;color:#718096">' + (b.programmeType||'') + ' · Arrival: ' + fmtDateShort(b.arrivalDate) + '</div></div>'
       + badgeHtml
+      + (!status.allDone ? '<button onclick="dlMarkAllSent(\'' + b.id + '\')" style="padding:4px 12px;background:#276749;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">✓ Mark All Sent</button>' : '')
       + '<button class="btn btn-sm btn-secondary" onclick="viewBooking(\'' + b.id + '\')">👁 Open</button>'
       + '</div>'
       + '<div id="dispatch-table-log-' + b.id + '">' + buildDispatchTableHtml(b.id) + '</div>'
@@ -3682,6 +3711,20 @@ async function doLogin() {
   const revNav = document.getElementById('nav-revenue');
   if (revNav) revNav.style.display = (user === 'Rokhsar') ? 'flex' : 'none';
   renderDashboard();
+  // Auto-refresh from sheet every 60s so both users see each other's dispatch updates
+  if (settings.sheetUrl && !window._syncInterval) {
+    window._syncInterval = setInterval(async () => {
+      if (document.querySelector('.modal-overlay.open')) return;
+      await loadFromSheet();
+      const active = document.querySelector('.section.active');
+      if (!active) return;
+      const name = active.id.replace('section-', '');
+      if (name === 'dashboard') renderDashboard();
+      else if (name === 'monthly') renderMonthly();
+      else if (name === 'dispatchlog') renderDispatchLog();
+      else if (name === 'alumni') renderAlumni();
+    }, 60000);
+  }
 }
 
 function currentUserLabel() {
