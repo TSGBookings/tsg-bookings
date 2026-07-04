@@ -2277,6 +2277,7 @@ function saveBooking() {
       const existing=bookings[idx];
       booking={
         ...existing, ...f, id:existing.id, isDraft:false, dispatched:true,
+        dispatchLog: Object.assign({}, f.dispatchLog || {}, existing.dispatchLog || {}),
         reminders: (()=>{
           // Always re-calculate dueDate in case arrival date changed
           const oldReminders = (existing.reminders && existing.reminders.length && !existing.isDraft) ? existing.reminders : [];
