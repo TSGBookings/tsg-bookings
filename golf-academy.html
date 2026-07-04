@@ -3715,7 +3715,7 @@ function renderDispatchLog() {
   const el = document.getElementById('dispatch-log-list');
   if (!el) return;
   _dlMergeIntoBookings(); // always restore local dispatch logs before rendering
-  const live = bookings.filter(b => !b.isDraft).sort((a,b) => (a.arrivalDate||'').localeCompare(b.arrivalDate||''));
+  const live = bookings.filter(b => !b.isDraft).sort((a,b) => (b.arrivalDate||'').localeCompare(a.arrivalDate||''));
   if (!live.length) {
     el.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No bookings yet.</p></div>';
     return;
