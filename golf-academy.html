@@ -3389,13 +3389,16 @@ function checkLeadHandoffParams() {
     draftId = draft.id;
   }
 
+  // Navigate to booking section first — showSection('booking',...) calls initBookingForm(),
+  // which resets formData/editingBookingId, so pre-fill AFTER navigating, not before.
+  const bookingNav = document.querySelector('[data-section=booking]');
+  showSection('booking', bookingNav);
+
   // Pre-fill formData and open the draft in the booking form
   Object.assign(formData, leadData);
   editingBookingId = draftId;
-
-  // Navigate to booking section
-  const bookingNav = document.querySelector('[data-section=booking]');
-  showSection('booking', bookingNav);
+  currentStep = 1;
+  renderStep();
 
   // Show a banner above the form
   setTimeout(() => {
