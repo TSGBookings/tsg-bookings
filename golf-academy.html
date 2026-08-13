@@ -1401,6 +1401,10 @@ function applyInvoiceCorrections() {
 }
 
 function init() {
+  // Chrome persistently re-fills this field with an old remembered value on load,
+  // ignoring autocomplete="off" — force it empty so a stale filter never hides real data.
+  const searchInputEl = document.getElementById('search-input');
+  if (searchInputEl) searchInputEl.value = '';
   loadState();
   applyInvoiceCorrections();
   // Show login overlay — app content renders after login
