@@ -471,7 +471,7 @@ textarea { resize: vertical; min-height: 80px; }
         <div class="flex items-center mb-16" id="pdf-btn-row">
           <div class="card-title" style="margin-bottom:0">All Bookings</div>
           <div class="ml-auto flex gap-8">
-            <input id="search-input" type="text" placeholder="Search student..." style="padding:6px 12px;font-size:13px;width:180px" oninput="renderDashboard()">
+            <input id="search-input" type="text" placeholder="Search student..." autocomplete="off" style="padding:6px 12px;font-size:13px;width:180px" oninput="renderDashboard()">
             <button class="btn btn-pdf btn-sm" onclick="downloadPDF()">⬇ Download PDF</button>
             <button class="btn btn-sm" style="background:#7c3aed;color:#fff;" onclick="showSection('booking', document.querySelector('[data-section=booking]'))">📤 Hand Off Lead</button>
             <button class="btn btn-primary btn-sm" onclick="showSection('booking', document.querySelector('[data-section=booking]'))">+ New Booking</button>
