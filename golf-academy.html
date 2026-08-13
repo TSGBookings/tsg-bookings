@@ -3534,7 +3534,14 @@ async function doLogin() {
   // Show/hide revenue nav item based on user
   const revNav = document.getElementById('nav-revenue');
   if (revNav) revNav.style.display = (user === 'Rokhsar') ? 'flex' : 'none';
+  // The search field sits behind the login overlay while hidden — Chrome appears to
+  // apply its remembered value only once the field becomes visible/interactive here,
+  // which is after init()'s own clear already ran. Clear it again now, and once more
+  // shortly after in case Chrome's autofill applies asynchronously post-render.
+  const clearSearchInput = () => { const si = document.getElementById('search-input'); if (si) si.value = ''; };
+  clearSearchInput();
   renderDashboard();
+  setTimeout(() => { clearSearchInput(); renderDashboard(); }, 300);
 }
 
 function currentUserLabel() {
