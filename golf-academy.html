@@ -408,7 +408,7 @@ textarea { resize: vertical; min-height: 80px; }
           <input id="search-input" type="text" placeholder="Search student..." style="padding:6px 12px;font-size:13px;width:160px" oninput="renderDashboard()">
           <div class="ml-auto flex gap-8">
             <button class="btn btn-pdf btn-sm" onclick="downloadPDF()">⬇ Download PDF</button>
-            <button class="btn btn-sm" style="background:#7c3aed;color:#fff;" onclick="openLeadHandoff()">📤 Hand Off Lead</button>
+            <button class="btn btn-sm" style="background:#7c3aed;color:#fff;" onclick="showSection('booking', document.querySelector('[data-section=booking]'))">📤 Hand Off Lead</button>
             <button class="btn btn-primary btn-sm" onclick="showSection('booking', document.querySelector('[data-section=booking]'))">+ New Booking</button>
           </div>
         </div>
@@ -661,72 +661,6 @@ textarea { resize: vertical; min-height: 80px; }
     </div>
     <div id="login-error" style="color:#e53e3e;font-size:12px;margin-bottom:12px;display:none">Incorrect password. Please try again.</div>
     <button onclick="doLogin()" style="width:100%;padding:11px;background:#021b3b;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Enter</button>
-  </div>
-</div>
-
-<!-- LEAD HANDOFF MODAL -->
-<div class="modal-overlay" id="lead-handoff-modal" style="display:none">
-  <div class="modal" style="max-width:560px">
-    <div class="modal-header">
-      <div class="modal-title">📤 Hand Off Lead</div>
-      <button class="btn btn-sm btn-secondary" onclick="closeLeadHandoff()">✕ Close</button>
-    </div>
-    <div style="padding:20px;font-size:13px;color:var(--text-muted);margin-bottom:8px">
-      Fill in what you know. Your teammate gets a WhatsApp message with a link — she clicks it and the booking form opens pre-filled.
-    </div>
-    <div style="padding:0 20px 20px">
-      <div class="form-grid">
-        <div class="form-group"><label>Student Name *</label><input id="lh-name" placeholder="Full name"></div>
-        <div class="form-group"><label>Age</label><input id="lh-age" type="number" placeholder="e.g. 15" min="5" max="25"></div>
-        <div class="form-group"><label>Gender</label>
-          <select id="lh-gender"><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></select>
-        </div>
-        <div class="form-group"><label>Home City</label><input id="lh-city" placeholder="e.g. Mumbai"></div>
-        <div class="form-group"><label>Parent / Guardian Name *</label><input id="lh-parent" placeholder="Full name"></div>
-        <div class="form-group"><label>Phone (with country code)</label><input id="lh-phone" placeholder="919876543210"></div>
-        <div class="form-group full"><label>Email Address</label><input id="lh-email" type="email" placeholder="parent@email.com"></div>
-        <div class="form-group full"><label>Programme Interest</label>
-          <select id="lh-prog">
-            <option value="">Not specified</option>
-            <option>1 Week</option><option>1 Month</option>
-            <option>Annual Integrated</option><option>Annual Golf and Fitness</option>
-            <option>Annual Only Golf</option><option>Single Session</option>
-            <option>Campus Tour</option><option>Other</option>
-          </select>
-        </div>
-        <div class="form-group full"><label>Handoff Notes (context for your teammate)</label>
-          <textarea id="lh-notes" placeholder="e.g. Father very keen, mentioned sibling — confirm if discount applies. Wants June slot."></textarea>
-        </div>
-      </div>
-      <div style="margin-top:16px;display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;gap:10px;align-items:center">
-          <button class="btn btn-primary" onclick="sendLeadHandoff()" style="background:#7c3aed">📲 Hand Off to Teammate</button>
-          <span id="lh-status" style="font-size:12px;color:var(--text-muted)"></span>
-        </div>
-        <div style="border-top:1px solid #e2e8f0;padding-top:12px">
-          <div style="font-size:12px;font-weight:700;color:#021b3b;margin-bottom:10px">CRITICAL — PARENT ONBOARDING</div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <div style="display:flex;align-items:center;justify-content:space-between;background:#f3f9e6;border:1px solid #c8e08a;border-radius:8px;padding:10px 12px">
-              <div>
-                <div style="font-size:13px;font-weight:600">📦 Things to Carry</div>
-                <div id="lh-tc-status" style="font-size:11px;color:#505971;margin-top:2px">Not yet sent</div>
-              </div>
-              <button onclick="lhSendTC()" class="btn btn-wa btn-sm">💬 Send WA</button>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:10px 12px">
-              <div>
-                <div style="font-size:13px;font-weight:600">📋 Visiting Student Form</div>
-                <div id="lh-vsf-status" style="font-size:11px;color:#505971;margin-top:2px">Not yet sent</div>
-              </div>
-              <div style="display:flex;gap:6px">
-                <a href="https://www.tsgacademy.in/admin/index.php" target="_blank" style="padding:5px 10px;border-radius:6px;border:none;font-size:12px;font-weight:600;background:#7c3aed;color:#fff;text-decoration:none">🔗 Open Portal</a>
-                <button onclick="lhMarkVSF()" class="btn btn-sm" style="background:#f3f9e6;border:1.5px solid #021b3b;color:#021b3b;font-weight:600">✓ Mark Sent</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -1394,6 +1328,7 @@ function loadState() {
       bookings = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(SAMPLE_DATA));
       if (!saved) saveState();
       renderDashboard();
+      checkLeadHandoffLink();
     }
   } catch(e) { bookings = JSON.parse(JSON.stringify(SAMPLE_DATA)); renderDashboard(); }
 }
@@ -1428,11 +1363,13 @@ async function loadFromSheet() {
     localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
     renderDashboard();
     console.log('✓ Loaded ' + data.bookings.length + ' bookings from Google Sheet');
+    checkLeadHandoffLink();
   } catch(e) {
     // Sheet failed — fall back to localStorage
     console.warn('Sheet load failed, using local cache:', e.message);
     const saved = localStorage.getItem('golf_bookings_v5');
     if (saved) { bookings = JSON.parse(saved); _dlMergeIntoBookings(); renderDashboard(); }
+    checkLeadHandoffLink();
   }
 }
 
@@ -2050,7 +1987,7 @@ function step1HTML() {
       <div class="form-group"><label>Phone (with country code)</label><input id="f-phone" value="${f.phone||''}" placeholder="919876543210"></div>
       <div class="form-group full"><label>Email Address</label><input id="f-email" type="email" value="${f.email||''}" placeholder="parent@email.com"></div>
     </div>
-    <div class="flex mt-20 gap-12" style="justify-content:flex-end"><button class="btn btn-secondary" onclick="saveDraft(1)">💾 Save as Draft</button><button class="btn btn-primary" onclick="s1Next()">Next: Programme Details →</button></div>
+    <div class="flex mt-20 gap-12" style="justify-content:flex-end"><button class="btn" style="background:#7c3aed;color:#fff" onclick="handOffToTeammate(1)">📤 Hand Off to Teammate</button><button class="btn btn-secondary" onclick="saveDraft(1)">💾 Save as Draft</button><button class="btn btn-primary" onclick="s1Next()">Next: Programme Details →</button></div>
   </div>`;
 }
 
@@ -2156,7 +2093,7 @@ function step2HTML() {
 
     <div class="flex mt-20 gap-12">
       <button class="btn btn-secondary" onclick="currentStep=1;renderStep()">← Back</button>
-      <div class="ml-auto flex gap-12"><button class="btn btn-secondary" onclick="saveDraft(2)">💾 Save as Draft</button><button class="btn btn-primary" onclick="s2Next()">✓ Save & Preview Messages →</button></div>
+      <div class="ml-auto flex gap-12"><button class="btn" style="background:#7c3aed;color:#fff" onclick="handOffToTeammate(2)">📤 Hand Off to Teammate</button><button class="btn btn-secondary" onclick="saveDraft(2)">💾 Save as Draft</button><button class="btn btn-primary" onclick="s2Next()">✓ Save & Preview Messages →</button></div>
     </div>
   </div>`;
 }
@@ -2482,7 +2419,7 @@ function editBooking(id){
   renderStep();
 }
 
-function saveDraft(fromStep){
+function captureFormData(fromStep){
   // Capture whatever's currently on screen
   if(fromStep>=1){
     const name=(document.getElementById('f-name')||{}).value||'';
@@ -2529,8 +2466,13 @@ function saveDraft(fromStep){
       });
     }
   }
+}
+
+// Persists formData as a draft booking and syncs it to the shared sheet.
+// Returns the saved booking, or null if the user cancelled (no student name).
+function persistDraft(fromStep){
   if(!formData.studentName||!formData.studentName.trim()){
-    if(!confirm('No student name entered. Save as untitled draft?'))return;
+    if(!confirm('No student name entered. Save as untitled draft?'))return null;
     formData.studentName='(Untitled draft)';
   }
   let draftToSync;
@@ -2545,7 +2487,48 @@ function saveDraft(fromStep){
   }
   saveState();
   if(draftToSync) syncToSheets(draftToSync); // sync draft so all team members can see it
+  return draftToSync;
+}
+
+function saveDraft(fromStep){
+  captureFormData(fromStep);
+  const draft=persistDraft(fromStep);
+  if(!draft) return;
   alert('Draft saved. You can resume it from the Monthly Grid.');
+  initBookingForm();
+  showSection('monthly',document.querySelector('[data-section=monthly]'));
+}
+
+// Hand off to a teammate: save everything filled in so far as a draft (Step 1
+// details, and Step 2 travel/invoice/accounts details if the sender got that far),
+// then send a WhatsApp summary with a link that opens this exact draft — no
+// re-typing on the other end.
+function handOffToTeammate(fromStep){
+  captureFormData(fromStep);
+  const draft=persistDraft(fromStep);
+  if(!draft) return;
+  draft._handoff=true;
+  draft._handoffBy=currentUserLabel();
+  saveState();
+  syncToSheets(draft);
+
+  const link=window.location.origin+window.location.pathname+'?lh_id='+draft.id;
+  const lines=['📤 *Lead Handoff from '+currentUserLabel()+'*',''];
+  lines.push('*Student:* '+(draft.studentName||'—'));
+  if(draft.age) lines.push('*Age:* '+draft.age);
+  lines.push('*Parent:* '+(draft.parentName||'—'));
+  if(draft.phone) lines.push('*Phone:* '+draft.phone);
+  if(draft.homeCity) lines.push('*City:* '+draft.homeCity);
+  if(draft.programmeType) lines.push('*Programme:* '+draft.programmeType);
+  if(draft.arrivalDate) lines.push('*Arrival:* '+fmtDate(draft.arrivalDate));
+  if(draft.departureDate) lines.push('*Departure:* '+fmtDate(draft.departureDate));
+  if(draft.invoiceAmount) lines.push('*Fee:* ₹'+draft.invoiceAmount);
+  if(draft.accountsNotes) lines.push('*Accounts note:* '+draft.accountsNotes);
+  if(draft.specialNotes) lines.push('*Notes:* '+draft.specialNotes);
+  lines.push('','Everything above is already filled in — open this link and the booking form opens pre-filled. Review, fill in anything missing, and submit:',link);
+
+  safeOpenLink('https://wa.me/?text='+encodeURIComponent(lines.join('\n')));
+  alert('Draft saved and WhatsApp opened — select who to send it to.');
   initBookingForm();
   showSection('monthly',document.querySelector('[data-section=monthly]'));
 }
@@ -3214,257 +3197,54 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.addEventListener('click', e => {
     if (document.getElementById('invoice-preview')) updateInvoicePreview();
   });
-  // Lead handoff: read URL params and pre-fill booking form
-  checkLeadHandoffParams();
-  // On PWA resume (iOS/Android may suspend app when switching to WhatsApp),
-  // restore lead handoff form fields from localStorage
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      const modal = document.getElementById('lead-handoff-modal');
-      if (modal && modal.style.display !== 'none') _lhRestoreFields();
-    }
-  });
 });
 
 // ─── LEAD HANDOFF ────────────────────────────────────────────────────────────
+// Handoff no longer uses a separate form or URL-encoded fields — handOffToTeammate()
+// (above, near saveDraft) saves the real booking draft to the shared sheet and
+// shares a link containing just its ID. This opens that draft once it's loaded.
 
-function _lhSaveFields() {
-  const data = {
-    name:   (document.getElementById('lh-name')||{}).value||'',
-    age:    (document.getElementById('lh-age')||{}).value||'',
-    gender: (document.getElementById('lh-gender')||{}).value||'',
-    city:   (document.getElementById('lh-city')||{}).value||'',
-    parent: (document.getElementById('lh-parent')||{}).value||'',
-    phone:  (document.getElementById('lh-phone')||{}).value||'',
-    email:  (document.getElementById('lh-email')||{}).value||'',
-    prog:   (document.getElementById('lh-prog')||{}).value||'',
-    notes:  (document.getElementById('lh-notes')||{}).value||''
-  };
-  localStorage.setItem('lh_draft', JSON.stringify(data));
-}
+let _lhLinkRetries = 0;
 
-function _lhRestoreFields() {
-  try {
-    const saved = localStorage.getItem('lh_draft');
-    if (!saved) return;
-    const d = JSON.parse(saved);
-    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
-    set('lh-name', d.name); set('lh-age', d.age); set('lh-gender', d.gender);
-    set('lh-city', d.city); set('lh-parent', d.parent); set('lh-phone', d.phone);
-    set('lh-email', d.email); set('lh-prog', d.prog); set('lh-notes', d.notes);
-  } catch(e) {}
-}
-
-
-// ─── LEAD HANDOFF DISPATCH ───
-let _lhDispatch = { tc: null, vsf: null, draftId: null }; // {by, at} + draftId for reliable matching
-
-function lhSendTC() {
-  const name   = (document.getElementById('lh-name')||{}).value || '';
-  const phone  = (document.getElementById('lh-phone')||{}).value || '';
-  const prog   = (document.getElementById('lh-prog')||{}).value || '';
-  if (!phone) { alert('Please enter the parent phone number first.'); return; }
-  const isAnnual = prog.toLowerCase().includes('annual');
-  const pdfLink = isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
-  const parent = (document.getElementById('lh-parent')||{}).value || '';
-  // Build a minimal booking-like object for the message builder
-  const fakeB = { studentName: name, parentName: parent, programmeType: prog, phone };
-  const msg = buildThingsToCarryMsg(fakeB, pdfLink);
-  const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
-  safeOpenLink(url);
-  _lhDispatch.tc = { by: currentUserLabel(), at: nowStamp() };
-  const el = document.getElementById('lh-tc-status');
-  if (el) el.textContent = '✅ Sent by ' + _lhDispatch.tc.by + ' at ' + _lhDispatch.tc.at;
-  // Persist to matching draft booking if exists
-  _lhPersistDispatch();
-}
-
-function lhMarkVSF() {
-  _lhDispatch.vsf = { by: currentUserLabel(), at: nowStamp() };
-  const el = document.getElementById('lh-vsf-status');
-  if (el) el.textContent = '✅ Sent by ' + _lhDispatch.vsf.by + ' at ' + _lhDispatch.vsf.at;
-  _lhPersistDispatch();
-}
-
-function _lhPersistDispatch() {
-  // Match by stored draft ID first; fall back to name+parent if ID not yet set
-  let draft = _lhDispatch.draftId ? bookings.find(b => b.id === _lhDispatch.draftId) : null;
-  if (!draft) {
-    const name   = (document.getElementById('lh-name')||{}).value || '';
-    const parent = (document.getElementById('lh-parent')||{}).value || '';
-    draft = bookings.find(b => b.isDraft && b._handoff && b.studentName === name && b.parentName === parent);
-    if (draft) _lhDispatch.draftId = draft.id; // cache it for subsequent calls
-  }
-  if (draft) {
-    if (!draft.dispatchLog) draft.dispatchLog = {};
-    if (_lhDispatch.tc)  draft.dispatchLog['parent_tc_wa'] = _lhDispatch.tc;
-    if (_lhDispatch.vsf) draft.dispatchLog['parent_vsf']   = _lhDispatch.vsf;
-    saveState();
-    syncToSheets(draft);
-  }
-}
-
-function openLeadHandoff() {
-  _lhDispatch = { tc: null, vsf: null, draftId: null };
-  document.getElementById('lead-handoff-modal').style.display = 'flex';
-  _lhRestoreFields();
-  // Reset status labels
-  const tcEl = document.getElementById('lh-tc-status'); if(tcEl) tcEl.textContent = 'Not yet sent';
-  const vsfEl = document.getElementById('lh-vsf-status'); if(vsfEl) vsfEl.textContent = 'Not yet sent';
-}
-
-function closeLeadHandoff() {
-  document.getElementById('lead-handoff-modal').style.display = 'none';
-  document.getElementById('lh-status').textContent = '';
-  // Clear all fields and saved draft so the form is fresh next time
-  ['lh-name','lh-age','lh-city','lh-parent','lh-phone','lh-email','lh-notes'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  const genderEl = document.getElementById('lh-gender');
-  if (genderEl) genderEl.value = '';
-  const progEl = document.getElementById('lh-prog');
-  if (progEl) progEl.value = '';
-  const tcEl = document.getElementById('lh-tc-status'); if (tcEl) tcEl.textContent = 'Not yet sent';
-  const vsfEl = document.getElementById('lh-vsf-status'); if (vsfEl) vsfEl.textContent = 'Not yet sent';
-  localStorage.removeItem('lh_draft');
-  _lhDispatch = { tc: null, vsf: null, draftId: null };
-}
-
-function sendLeadHandoff() {
-  const name   = document.getElementById('lh-name').value.trim();
-  const parent = document.getElementById('lh-parent').value.trim();
-  if (!name || !parent) { alert('Student name and parent name are required.'); return; }
-
-  const params = new URLSearchParams();
-  if (name)   params.set('lh_name',   name);
-  if (parent) params.set('lh_parent', parent);
-  const age    = document.getElementById('lh-age').value.trim();    if (age)    params.set('lh_age',    age);
-  const gender = document.getElementById('lh-gender').value;         if (gender) params.set('lh_gender', gender);
-  const city   = document.getElementById('lh-city').value.trim();   if (city)   params.set('lh_city',   city);
-  const phone  = document.getElementById('lh-phone').value.trim();  if (phone)  params.set('lh_phone',  phone);
-  const email  = document.getElementById('lh-email').value.trim();  if (email)  params.set('lh_email',  email);
-  const prog   = document.getElementById('lh-prog').value;           if (prog)   params.set('lh_prog',   prog);
-  const notes  = document.getElementById('lh-notes').value.trim();  if (notes)  params.set('lh_notes',  notes);
-
-  const baseUrl = window.location.origin + window.location.pathname;
-  const link = baseUrl + '?' + params.toString();
-
-  const msg =
-    `📤 *Lead Handoff from Rokhsar*\n\n` +
-    `*Student:* ${name}\n` +
-    (age    ? `*Age:* ${age}\n`      : '') +
-    `*Parent:* ${parent}\n` +
-    (phone  ? `*Phone:* ${phone}\n`  : '') +
-    (city   ? `*City:* ${city}\n`    : '') +
-    (prog   ? `*Programme interest:* ${prog}\n` : '') +
-    (notes  ? `\n*Notes:* ${notes}\n` : '') +
-    `\nOpen this link to create the booking (form will be pre-filled):\n${link}`;
-
-  // Save fields to localStorage so they survive PWA suspension on iOS/Android
-  _lhSaveFields();
-  // Opens WhatsApp with message pre-filled — select TSG Booking group manually
-  safeOpenLink(`https://wa.me/?text=${encodeURIComponent(msg)}`);
-  document.getElementById('lh-status').textContent = '✓ WhatsApp opened — select TSG Booking group to send';
-
-  // Also save as a draft on the sender's app so it's visible in the dashboard
-  const existingHandoff = bookings.find(b => b.isDraft && b._handoff && b.studentName === name && b.parentName === parent);
-  if (existingHandoff) {
-    _lhDispatch.draftId = existingHandoff.id; // store ID for reliable dispatch matching
-  } else {
-    const newId = uid();
-    const draft = {
-      id: newId, isDraft: true, _handoff: true,
-      createdAt: new Date().toISOString(),
-      studentName: name, parentName: parent,
-      age: age||'', gender: gender||'', homeCity: city||'',
-      phone: phone||'', email: email||'',
-      programmeType: prog||'', specialNotes: notes||'',
-      arrivalDate:'', departureDate:'', inclusions:[],
-      invoiceAmount:'', miscFees:'', gstApplicable:false, discountApplicable:false
-    };
-    bookings.push(draft);
-    saveState();
-    syncToSheets(draft); // sync handoff draft so all team members see it
-    renderDashboard();
-    _lhDispatch.draftId = newId; // store ID for reliable dispatch matching
-  }
-}
-
-function checkLeadHandoffParams() {
+function checkLeadHandoffLink() {
   const params = new URLSearchParams(window.location.search);
-  if (!params.has('lh_name') && !params.has('lh_parent')) return;
+  const id = params.get('lh_id');
+  if (!id) return;
 
-  // Build the lead data from URL params
-  const leadData = {
-    studentName   : params.get('lh_name')   || '',
-    parentName    : params.get('lh_parent')  || '',
-    age           : params.get('lh_age')     || '',
-    gender        : params.get('lh_gender')  || '',
-    homeCity      : params.get('lh_city')    || '',
-    phone         : params.get('lh_phone')   || '',
-    email         : params.get('lh_email')   || '',
-    programmeType : params.get('lh_prog')    || '',
-    specialNotes  : params.get('lh_notes')   || '',
-  };
-
-  // Check if a draft for this lead already exists (avoid duplicates on refresh)
-  const existingDraft = bookings.find(b =>
-    b.isDraft &&
-    b.studentName === leadData.studentName &&
-    b.parentName  === leadData.parentName  &&
-    b._handoff === true
-  );
-
-  let draftId;
-  if (existingDraft) {
-    // Re-use the existing draft
-    draftId = existingDraft.id;
-    Object.assign(existingDraft, leadData);
-    saveState();
-  } else {
-    // Save as a new draft immediately so it survives tab close
-    const draft = Object.assign({}, leadData, {
-      id        : uid(),
-      isDraft   : true,
-      _handoff  : true,
-      createdAt : new Date().toISOString(),
-      arrivalDate   : '',
-      departureDate : '',
-      inclusions    : [],
-      invoiceAmount : '',
-      miscFees      : '',
-      gstApplicable : false,
-      discountApplicable: false,
-    });
-    bookings.unshift(draft);
-    saveState();
-    draftId = draft.id;
+  const draft = bookings.find(b => b.id === id);
+  if (!draft) {
+    // Draft may not have synced to the sheet yet — retry briefly before giving up.
+    if (_lhLinkRetries < 5) {
+      _lhLinkRetries++;
+      setTimeout(() => { if (settings.sheetUrl) loadFromSheet(); else checkLeadHandoffLink(); }, 1500);
+    } else {
+      alert('Couldn\'t find that handed-off booking yet — ask them to check their connection, then reopen the link.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    return;
   }
 
-  // Navigate to booking section first — showSection('booking',...) calls initBookingForm(),
-  // which resets formData/editingBookingId, so pre-fill AFTER navigating, not before.
+  // Navigate first — showSection->initBookingForm resets formData/editingBookingId,
+  // so seed the real values only after that (see editBooking() for the same pattern).
   const bookingNav = document.querySelector('[data-section=booking]');
   showSection('booking', bookingNav);
-
-  // Pre-fill formData and open the draft in the booking form
-  Object.assign(formData, leadData);
-  editingBookingId = draftId;
+  editingBookingId = draft.id;
+  formData = JSON.parse(JSON.stringify(draft));
   currentStep = 1;
   renderStep();
 
-  // Show a banner above the form
   setTimeout(() => {
     const stepContent = document.getElementById('step-content');
     if (stepContent) {
       const banner = document.createElement('div');
       banner.style.cssText = 'background:#f3e8ff;border:1.5px solid #7c3aed;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;display:flex;align-items:center;gap:10px';
-      banner.innerHTML = '<span style="font-size:18px">📤</span><div><strong>Lead handed off by Rokhsar</strong> — details pre-filled and saved as a draft. Complete Step 2 and submit when ready.</div>';
+      banner.innerHTML = '<span style="font-size:18px">📤</span><div><strong>Lead handed off' + (draft._handoffBy ? ' by ' + draft._handoffBy : '') + '</strong> — everything they filled in is already here. Review, fill in what\'s left, and submit.</div>';
       stepContent.insertBefore(banner, stepContent.firstChild);
     }
-    // Clean the URL so a refresh doesn't create a duplicate draft
-    window.history.replaceState({}, '', window.location.pathname);
-  }, 100);
+  }, 50);
+
+  // Clean the URL so a refresh doesn't re-process the link
+  window.history.replaceState({}, '', window.location.pathname);
 }
 
 
