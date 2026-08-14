@@ -144,8 +144,18 @@ textarea { resize: vertical; min-height: 80px; }
 .settings-section h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
 .settings-tip { font-size: 12px; color: #505971; margin-top: 8px; background: #f7fafc; padding: 10px 13px; border-radius: 8px; line-height: 1.6; }
 
-.dispatch-item { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: #f3f9e6; border-radius: 11px; margin-bottom: 8px; border: 1px solid #dcecb0; }
+.dispatch-item { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; background: #f3f9e6; border-radius: 11px; margin-bottom: 8px; border: 1px solid #dcecb0; }
+.dispatch-item > div:last-child { padding-top: 4px; line-height: 1.5; }
 .dispatch-check { width: 30px; height: 30px; background: #021b3b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+
+.wizard-section { border-radius: 10px; padding: 18px 20px; margin-bottom: 18px; border: 1.5px solid; }
+.wizard-section .card-title { font-size: 12px; text-transform: none; letter-spacing: 0; margin-bottom: 14px; }
+.wizard-section-programme { background: #f8fafc; border-color: #cbd5e1; }
+.wizard-section-programme .card-title { color: #334155; }
+.wizard-section-travel { background: #fff7ed; border-color: #fdba74; }
+.wizard-section-travel .card-title { color: #c2410c; }
+.wizard-section-invoice { background: #f0fdf4; border-color: #86efac; }
+.wizard-section-invoice .card-title { color: #15803d; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; display: none; backdrop-filter: blur(2px); }
 .modal-overlay.open { display: flex; }
@@ -2056,11 +2066,10 @@ function step2HTML() {
   const f=formData, inc=f.inclusions||[];
   const incItems=[{k:'Golf',icon:'⛳'},{k:'Fitness',icon:'💪'},{k:'Food',icon:'🍽️'},{k:'Stay',icon:'🏠'},{k:'Airport Pick-up',icon:'✈️'},{k:'Campus Visit',icon:'🏫'},{k:'Requires Clubs',icon:'🏌'}];
   const iv=calcLiveInvoice(f);
-  const SECTION_STYLE='background:#f9fafb;border:1px solid #e2e8f0;border-radius:10px;padding:18px 20px;margin-bottom:18px';
   return `<div class="card">
     <div class="card-title">Step 2 of 4 — Programme & Invoice Details</div>
 
-    <div style="${SECTION_STYLE}">
+    <div class="wizard-section wizard-section-programme">
       <div class="card-title">📅 Programme & Schedule</div>
       <div class="form-grid">
         <div class="form-group full"><label>Programme Type</label>
@@ -2090,7 +2099,7 @@ function step2HTML() {
       </div>
     </div>
 
-    <div style="${SECTION_STYLE}">
+    <div class="wizard-section wizard-section-travel">
       <div class="card-title">✈️ Travel / Airport Pickup Details</div>
       <div class="form-grid">
         <div class="form-group"><label>Traveller Name</label><input id="f-trav-name" value="${f.travellerName||''}" placeholder="Name of person arriving (if different from student)"></div>
@@ -2109,7 +2118,7 @@ function step2HTML() {
       </div>
     </div>
 
-    <div style="${SECTION_STYLE}">
+    <div class="wizard-section wizard-section-invoice">
       <div class="card-title">💰 Invoice Details</div>
       <div class="form-grid">
         <div class="form-group">
@@ -2268,15 +2277,20 @@ function s2Next() {
 }
 
 // STEP 3 — Preview & Dispatch
+const ADULT_GOOGLE_FORM_URL = 'https://forms.gle/baRYU8SDW4xprmbt7';
+
 function step3HTML() {
   const f=formData;
   const {opsMsg,accountsMsg,hospitalityMsg,reminderDate}=buildMessages(f);
   const inc=f.inclusions||[], hasHospitality=inc.includes('Food')||inc.includes('Stay');
   const hasTravel=inc.includes('Airport Pick-up')||f.travellerName||f.flightNo||f.flightArrivalTime;
+  const isAdult=Number(f.age)>=18;
   const encOps=encodeURIComponent(opsMsg), encAcc=encodeURIComponent(accountsMsg);
   const encHosp=hospitalityMsg?encodeURIComponent(hospitalityMsg):'';
   const travelMsg=buildTravelMsg(f);
   window._step3TravelMsg = travelMsg;
+  const adultFormMsg=`Hi ${f.studentName||'there'},\n\nAs an adult participant, please fill out this quick form before your arrival:\n${ADULT_GOOGLE_FORM_URL}\n\nThanks!\nTSG Golf Academy`;
+  const encAdultForm=encodeURIComponent(adultFormMsg);
   return `<div class="card">
     <div class="card-title">Step 3 of 4 — Preview & Dispatch</div>
     <div class="msg-section">
@@ -2293,6 +2307,7 @@ function step3HTML() {
     </div>
     ${hasHospitality?`<div class="msg-section"><div class="msg-header"><div class="msg-title">🏠 Hospitality — Room & Meal Prep</div><div class="flex gap-8"><button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encHosp}','hospitality')">💬 WhatsApp</button><button class="btn btn-sm btn-secondary" onclick="sendEmailMsg('hospitality','${encHosp}','Hospitality — '+'${(f.studentName||'').replace(/'/g,'')}',formData)">📧 Email</button></div></div><div class="msg-preview">${hospitalityMsg}</div></div>`:''}
     ${hasTravel?`<div class="msg-section"><div class="msg-header"><div class="msg-title">✈️ Transport — Travel Brief</div><div class="flex gap-8"><button class="btn btn-sm btn-wa" onclick="openWAWithMsg(encodeURIComponent(window._step3TravelMsg),'transport')">💬 WhatsApp</button></div></div><div class="msg-preview">${travelMsg.replace(/\n/g,'<br>')}</div></div>`:''}
+    ${isAdult?`<div class="msg-section"><div class="msg-header"><div class="msg-title">🧑 Adult Participant — Google Form</div><div class="flex gap-8"><button class="btn btn-sm btn-wa" onclick="openWAWithMsg('${encAdultForm}','parent','${f.phone||''}')">💬 WhatsApp</button></div></div><div class="msg-preview">${adultFormMsg.replace(/\n/g,'<br>')}</div></div>`:''}
     <div class="card" style="background:#f3f9e6;border:1.5px solid #AECF4E;margin-top:4px">
       <div class="card-title" style="color:#021b3b">🔔 Auto-Scheduled Reminders — 1 Day Before Arrival (${fmtDate(reminderDate)})</div>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
