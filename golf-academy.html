@@ -688,112 +688,7 @@ textarea { resize: vertical; min-height: 80px; }
 
 <script>
 // ===================== SAMPLE DATA =====================
-const SAMPLE_DATA = []; const _UNUSED_SAMPLE = [
-  {
-    id:'b001', studentName:'Arjun Mehta', age:'16', gender:'Male', homeCity:'Mumbai',
-    parentName:'Suresh Mehta', phone:'919876543210', email:'suresh.mehta@email.com',
-    programmeType:'Annual Integrated', programmeTypeOther:'', inclusions:['Golf','Fitness','Food','Stay'],
-    arrivalDate:'2026-04-01', arrivalTime:'10:00', trainingPeriod:'2 weeks',
-    departureDate:'2026-04-14', invoiceAmount:'85000', miscFees:'', gstApplicable:false, discountApplicable:false, discountAmount:'', accountsNotes:'',
-    specialNotes:'Needs gluten-free meals. Previous academy: Eagleton.',
-    createdAt:'2026-03-15', dispatched:true,
-    reminders:[
-      {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:'2026-03-31',done:true},
-      {type:'parent-call',label:'Parent Confirmation Call',dueDate:'2026-03-31',done:true}
-    ]
-  },
-  {
-    id:'b002', studentName:'Priya Sharma', age:'14', gender:'Female', homeCity:'Delhi',
-    parentName:'Rajesh Sharma', phone:'919845021300', email:'rajesh.sharma@email.com',
-    programmeType:'1 Week', programmeTypeOther:'', inclusions:['Golf','Food'],
-    arrivalDate:'2026-04-05', arrivalTime:'12:00', trainingPeriod:'1 week',
-    departureDate:'2026-04-12', invoiceAmount:'42000', miscFees:'', gstApplicable:false, discountApplicable:false, discountAmount:'', accountsNotes:'',
-    specialNotes:'Day scholar — no accommodation needed.',
-    createdAt:'2026-03-18', dispatched:true,
-    reminders:[
-      {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:'2026-04-04',done:true},
-      {type:'parent-call',label:'Parent Confirmation Call',dueDate:'2026-04-04',done:false}
-    ]
-  },
-  {
-    id:'b003', studentName:'Rahul Gupta', age:'13', gender:'Male', homeCity:'Bangalore',
-    parentName:'Amit Gupta', phone:'919900112233', email:'amit.gupta@email.com',
-    programmeType:'1 Month', programmeTypeOther:'', inclusions:['Golf','Fitness','Food','Stay'],
-    arrivalDate:'2026-04-08', arrivalTime:'09:30', trainingPeriod:'2 weeks',
-    departureDate:'2026-04-22', invoiceAmount:'72000', miscFees:'2000', gstApplicable:true, discountApplicable:false, discountAmount:'', accountsNotes:'First instalment received. Balance due on arrival.',
-    specialNotes:'First residential camp. Needs extra orientation.',
-    createdAt:'2026-03-20', dispatched:true,
-    reminders:[
-      {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:'2026-04-07',done:false},
-      {type:'parent-call',label:'Parent Confirmation Call',dueDate:'2026-04-07',done:false}
-    ]
-  },
-  {
-    id:'b004', studentName:'Ananya Singh', age:'17', gender:'Female', homeCity:'Chennai',
-    parentName:'Vikram Singh', phone:'919444556677', email:'vikram.singh@email.com',
-    programmeType:'Annual Golf and Fitness', programmeTypeOther:'', inclusions:['Golf','Fitness','Food','Stay','Airport Pick-up'],
-    arrivalDate:'2026-04-10', arrivalTime:'11:00', trainingPeriod:'2 weeks',
-    departureDate:'2026-04-24', invoiceAmount:'90000', miscFees:'3500', gstApplicable:true, discountApplicable:true, discountAmount:'5000', accountsNotes:'Scholarship student — discount pre-approved by principal.',
-    specialNotes:'State-level player. Focus on short game and putting.',
-    createdAt:'2026-03-22', dispatched:true,
-    reminders:[
-      {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:'2026-04-09',done:false},
-      {type:'parent-call',label:'Parent Confirmation Call',dueDate:'2026-04-09',done:false}
-    ]
-  },
-  {
-    id:'b005', studentName:'Vikram Patel', age:'15', gender:'Male', homeCity:'Ahmedabad',
-    parentName:'Dinesh Patel', phone:'919712345678', email:'dinesh.patel@email.com',
-    programmeType:'1 Month', programmeTypeOther:'', inclusions:['Golf','Fitness'],
-    arrivalDate:'2026-04-15', arrivalTime:'10:00', trainingPeriod:'2 weeks',
-    departureDate:'2026-04-28', invoiceAmount:'55000', miscFees:'', gstApplicable:false, discountApplicable:false, discountAmount:'', accountsNotes:'',
-    specialNotes:'',
-    createdAt:'2026-03-25', dispatched:false,
-    reminders:[
-      {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:'2026-04-14',done:false},
-      {type:'parent-call',label:'Parent Confirmation Call',dueDate:'2026-04-14',done:false}
-    ]
-  },
-  {
-    id:'b006', studentName:'Sneha Reddy', age:'14', gender:'Female', homeCity:'Hyderabad',
-    parentName:'Ravi Reddy', phone:'919550123456', email:'ravi.reddy@email.com',
-    programmeType:'1 Week', programmeTypeOther:'', inclusions:['Golf','Food','Stay'],
-    arrivalDate:'2026-04-18', arrivalTime:'14:00', trainingPeriod:'1 week',
-    departureDate:'2026-04-25', invoiceAmount:'48000', miscFees:'', gstApplicable:false, discountApplicable:false, discountAmount:'', accountsNotes:'',
-    specialNotes:'Severe nut allergy — please inform kitchen.',
-    createdAt:'2026-03-28', dispatched:false,
-    reminders:[
-      {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:'2026-04-17',done:false},
-      {type:'parent-call',label:'Parent Confirmation Call',dueDate:'2026-04-17',done:false}
-    ]
-  },
-  {
-    id:'b007', studentName:'Karan Nair', age:'16', gender:'Male', homeCity:'Kochi',
-    parentName:'Sunil Nair', phone:'919447890123', email:'sunil.nair@email.com',
-    programmeType:'Annual Integrated', programmeTypeOther:'', inclusions:['Golf','Fitness','Food','Stay','Airport Pick-up'],
-    arrivalDate:'2026-04-20', arrivalTime:'09:00', trainingPeriod:'2 weeks',
-    departureDate:'2026-05-04', invoiceAmount:'88000', miscFees:'2500', gstApplicable:true, discountApplicable:false, discountAmount:'', accountsNotes:'',
-    specialNotes:'National ranking: U-18 Top 10. Video analysis requested.',
-    createdAt:'2026-03-30', dispatched:false,
-    reminders:[
-      {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:'2026-04-19',done:false},
-      {type:'parent-call',label:'Parent Confirmation Call',dueDate:'2026-04-19',done:false}
-    ]
-  },
-  {
-    id:'b008', studentName:'Diya Khanna', age:'15', gender:'Female', homeCity:'Pune',
-    parentName:'Anil Khanna', phone:'919823456789', email:'anil.khanna@email.com',
-    programmeType:'1 Week', programmeTypeOther:'', inclusions:['Golf','Food','Stay','Airport Pick-up'],
-    arrivalDate:'2026-04-22', arrivalTime:'11:30', trainingPeriod:'1 week',
-    departureDate:'2026-04-29', invoiceAmount:'52000', miscFees:'1500', gstApplicable:false, discountApplicable:false, discountAmount:'', accountsNotes:'Airport pickup from Pune airport — coordinate with transport.',
-    specialNotes:'Needs airport pickup from Pune airport.',
-    createdAt:'2026-04-01', dispatched:false,
-    reminders:[
-      {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:'2026-04-21',done:false},
-      {type:'parent-call',label:'Parent Confirmation Call',dueDate:'2026-04-21',done:false}
-    ]
-  }
-]; // end _UNUSED_SAMPLE
+const SAMPLE_DATA = [];
 
 // ===================== ALUMNI =====================
 const ALUMNI_HISTORICAL = [
@@ -1276,31 +1171,12 @@ let currentUser = null; // 'Rokhsar' or 'Admin'
 let bookingsListExpanded = false;
 
 // ===================== INIT =====================
-// Manual invoice corrections — applied once on load
-const _INVOICE_CORRECTIONS = [
-  {name: 'Aditi Biradar',   amount: '750000'},
-  {name: 'Lakshya Wakodkar', amount: '550000'},
-];
-function applyInvoiceCorrections() {
-  let changed = false;
-  _INVOICE_CORRECTIONS.forEach(function(c) {
-    bookings.forEach(function(b) {
-      if ((b.studentName||'').toLowerCase().trim() === c.name.toLowerCase().trim() && b.invoiceAmount !== c.amount) {
-        b.invoiceAmount = c.amount;
-        changed = true;
-      }
-    });
-  });
-  if (changed) { saveState(); syncAllToSheets && bookings.filter(b=>_INVOICE_CORRECTIONS.some(c=>(b.studentName||'').toLowerCase().trim()===c.name.toLowerCase().trim())).forEach(b=>syncToSheets(b)); }
-}
-
 function init() {
   // Chrome persistently re-fills this field with an old remembered value on load,
   // ignoring autocomplete="off" — force it empty so a stale filter never hides real data.
   const searchInputEl = document.getElementById('search-input');
   if (searchInputEl) searchInputEl.value = '';
   loadState();
-  applyInvoiceCorrections();
   // Show login overlay — app content renders after login
   const overlay = document.getElementById('login-overlay');
   if (overlay) overlay.style.display = 'flex';
@@ -1357,12 +1233,10 @@ async function loadFromSheet() {
     // Keep any local drafts not yet synced to sheet (but not ones we've deliberately deleted)
     const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id) && !deletedIds[b.id]);
     bookings = [...mergedSheetBookings, ...localDrafts];
-    applyInvoiceCorrections();
     _dlMergeIntoBookings(); // restore any locally-logged dispatch entries
     // Save clean sheet data to localStorage
     localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
     renderDashboard();
-    console.log('✓ Loaded ' + data.bookings.length + ' bookings from Google Sheet');
     checkLeadHandoffLink();
   } catch(e) {
     // Sheet failed — fall back to localStorage
@@ -1998,6 +1872,11 @@ function s1Next() {
   currentStep=2; renderStep();
 }
 
+// Single source of truth for inclusion keys — read back into formData.inclusions
+// wherever checkboxes are captured (s2Next, captureFormData). Keep in sync with
+// the icon-labeled incItems array inside step2HTML().
+const INCLUSION_KEYS=['Golf','Fitness','Food','Stay','Airport Pick-up','Campus Visit','Requires Clubs'];
+
 // STEP 2 — Programme Details
 function step2HTML() {
   const f=formData, inc=f.inclusions||[];
@@ -2185,7 +2064,6 @@ function s2Next() {
   if(!arrival||!departure){alert('Arrival and departure dates are required.');return;}
   const allowSameDay=['campus visit','single session'].some(t=>progVal.toLowerCase().includes(t));
   if(allowSameDay?arrival>departure:arrival>=departure){alert('Departure date must be on or after arrival date.');return;}
-  const INCL_KEYS=['Golf','Fitness','Food','Stay','Airport Pick-up','Campus Visit','Requires Clubs'];
   Object.assign(formData,{
     programmeType:(function(){ var v=progVal; if(v==='Other'){var o=(document.getElementById('f-prog-other')||{}).value||''; return o?'Other: '+o:'Other';} return v; })(),
     programmeTypeOther:(document.getElementById('f-prog-other')||{}).value||'',
@@ -2195,7 +2073,7 @@ function s2Next() {
     discountApplicable:document.getElementById('f-disc-cb').checked,
     discountAmount:document.getElementById('f-disc-amt')?document.getElementById('f-disc-amt').value:'',
     accountsNotes:document.getElementById('f-acc-notes').value,
-    inclusions:INCL_KEYS.filter(k=>{ const el=document.getElementById('inc-'+k.replace(' ','-')); return el&&el.checked; }),
+    inclusions:INCLUSION_KEYS.filter(k=>{ const el=document.getElementById('inc-'+k.replace(' ','-')); return el&&el.checked; }),
     heightCm:document.getElementById('f-height-cm')?document.getElementById('f-height-cm').value:'',
     arrivalDate:arrival, arrivalTime:document.getElementById('f-atime').value,
     trainingStartDate:document.getElementById('f-train-start').value,
@@ -2435,7 +2313,6 @@ function captureFormData(fromStep){
     });
   }
   if(fromStep>=2){
-    const INCL_KEYS=['Golf','Fitness','Food','Stay','Airport Pick-up','Campus Visit'];
     const progEl=document.getElementById('f-prog');
     if(progEl){
       const v=progEl.value;
@@ -2449,7 +2326,8 @@ function captureFormData(fromStep){
         discountApplicable:(document.getElementById('f-disc-cb')||{}).checked||false,
         discountAmount:(document.getElementById('f-disc-amt')||{}).value||formData.discountAmount||'',
         accountsNotes:(document.getElementById('f-acc-notes')||{}).value||formData.accountsNotes||'',
-        inclusions:INCL_KEYS.filter(k=>{const el=document.getElementById('inc-'+k.replace(' ','-'));return el&&el.checked;}),
+        inclusions:INCLUSION_KEYS.filter(k=>{const el=document.getElementById('inc-'+k.replace(' ','-'));return el&&el.checked;}),
+        heightCm:document.getElementById('f-height-cm')?document.getElementById('f-height-cm').value:(formData.heightCm||''),
         arrivalDate:(document.getElementById('f-arrival')||{}).value||formData.arrivalDate||'',
         arrivalTime:(document.getElementById('f-atime')||{}).value||formData.arrivalTime||'',
         trainingStartDate:(document.getElementById('f-train-start')||{}).value||formData.trainingStartDate||'',
@@ -2562,15 +2440,6 @@ ${pdfLink?'\n📎 Packing List: '+pdfLink:''}
 ${hasAirport?'\n✈️ *Airport Pick-up:* Arranged — our team will meet you at arrivals. No need to book a cab.':''}
 ━━━━━━━━━━━━━━━━━━━━
 Looking forward to welcoming ${b.studentName} to TSG! ⛳`;
-}
-
-function tcPdfMissing(b) {
-  const progType=(b.programmeType||'').toLowerCase();
-  const isAnnual=progType.includes('annual');
-  const isSingleSession=progType.includes('single session');
-  if(isSingleSession) return false;
-  const pdfLink=isAnnual?settings.pdfAnnual:settings.pdfVisiting;
-  return !pdfLink;
 }
 
 // ===================== VIEW MODAL =====================
@@ -2718,22 +2587,6 @@ function saveTravelDetails(id) {
   if (btn) { const orig=btn.textContent; btn.textContent='✓ Saved'; btn.style.background='#021b3b'; btn.style.color='#fff'; setTimeout(()=>{btn.textContent=orig;btn.style.background='';btn.style.color='';},1800); }
 }
 
-function sendTCWhatsApp() {
-  const b = bookings.find(x => x.id === window._tcBookingId);
-  const pdfLink = (document.getElementById('tc-pdf-select')||{}).value || '';
-  const msg = b ? buildThingsToCarryMsg(b, pdfLink) : (window._tcMsg || '');
-  const num = window._tcPhone || '';
-  const url = num ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-  safeOpenLink(url);
-}
-
-function sendTCEmail(studentName, bookingId) {
-  const b = bookings.find(x => x.id === bookingId);
-  const pdfLink = (document.getElementById('tc-pdf-select')||{}).value || '';
-  const msg = b ? buildThingsToCarryMsg(b, pdfLink) : (window._tcMsg || '');
-  sendEmailMsg('parent', encodeURIComponent(msg), 'Things to Carry — ' + studentName, b);
-}
-
 function openWAWithMsg(encodedMsg, team, phone) {
   const msg=decodeURIComponent(encodedMsg);
   const encoded=encodeURIComponent(msg);
@@ -2754,8 +2607,6 @@ function openWAWithMsg(encodedMsg, team, phone) {
   safeOpenLink(url);
 }
 
-function markDoneFromModal(bookingId,type){markDone(bookingId,type);closeModal();setTimeout(()=>viewBooking(bookingId),100);}
-function quickWA(id){const b=bookings.find(x=>x.id===id);if(!b)return;const{opsMsg}=buildMessages(b);openWAWithMsg(encodeURIComponent(opsMsg),'ops');}
 function deleteBooking(id){
   if(!confirm('Delete this booking? This cannot be undone.'))return;
   bookings=bookings.filter(b=>b.id!==id);
@@ -3302,10 +3153,6 @@ function dlLog(bookingId, recipient, channel) {
   syncToSheets(b);
 }
 
-function dlGet(b, recipient, channel) {
-  return (b.dispatchLog || {})[dlKey(recipient, channel)] || null;
-}
-
 function dlMarkCall(bookingId, recipient) {
   dlLog(bookingId, recipient, 'call');
   renderDispatchTable(bookingId);
@@ -3384,12 +3231,6 @@ function computeDispatchStatus(b) {
     total: required.length,
     pending
   };
-}
-
-function dispatchBadgeHtml(b) {
-  const s = computeDispatchStatus(b);
-  if (s.allDone) return '<span class="badge badge-done" style="font-size:12px">✅ All Informed</span>';
-  return '<span class="badge" style="background:#fff3cd;color:#856404;font-size:12px;font-weight:700">⚠️ ' + s.pending.length + ' pending</span>';
 }
 
 function renderDispatchTable(bookingId) {
