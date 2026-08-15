@@ -1105,11 +1105,24 @@ function renderAlumni() {
   }).join('');
 }
 
+// Single source of truth for the Alumni export columns — header labels and the
+// matching record-field order, kept together so CSV/Excel can't drift apart.
+const ALUMNI_COLUMNS = [
+  {label:'Student Name',  field:'studentName'},
+  {label:'Parent Name',   field:'parentName'},
+  {label:'Phone',         field:'phone'},
+  {label:'Email',         field:'email'},
+  {label:'City',          field:'homeCity'},
+  {label:'Programme',     field:'programmeType'},
+  {label:'Month of Visit',field:'monthOfVisit'},
+  {label:'Type',          field:'type'}
+];
+
 function downloadAlumniCSV() {
   var all = getAlumniRecords();
-  var header = ['Student Name','Parent Name','Phone','Email','City','Programme','Month of Visit','Type'];
+  var header = ALUMNI_COLUMNS.map(function(c){return c.label;});
   var dataRows = all.map(function(r){
-    return [r.studentName,r.parentName,r.phone,r.email,r.homeCity,r.programmeType,r.monthOfVisit,r.type]
+    return ALUMNI_COLUMNS.map(function(c){return r[c.field];})
       .map(function(v){return '"'+(v||'').replace(/"/g,'""')+'"';}).join(',');
   });
   var csv = [header.join(',')].concat(dataRows).join('\n');
@@ -1122,9 +1135,8 @@ function downloadAlumniCSV() {
 
 function downloadAlumniExcel() {
   var all = getAlumniRecords();
-  function esc(v){return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-  var allRows = [['Student Name','Parent Name','Phone','Email','City','Programme','Month of Visit','Type']].concat(
-    all.map(function(r){return [r.studentName,r.parentName,r.phone,r.email,r.homeCity,r.programmeType,r.monthOfVisit,r.type];})
+  var allRows = [ALUMNI_COLUMNS.map(function(c){return c.label;})].concat(
+    all.map(function(r){return ALUMNI_COLUMNS.map(function(c){return r[c.field];});})
   );
   var xml = '<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
     +'<Styles><Style ss:ID="H"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#021b3b" ss:Pattern="Solid"/></Style></Styles>'
@@ -1467,12 +1479,15 @@ function fmtTime(t) {
     return '';
   } catch(e) { return ''; }
 }
+// Single source of truth for inclusion icons — used both for dashboard/monthly
+// badges (inclBadges) and the monthly PDF print table (buildMonthlyPrintRows).
+const INCLUSION_ICONS={Golf:'⛳',Fitness:'💪',Food:'🍽️',Stay:'🏠','Airport Pick-up':'✈️','Campus Visit':'🏫','Requires Clubs':'🏌'};
+
 function inclBadges(arr) {
-  const icons={Golf:'⛳',Fitness:'💪',Food:'🍽️',Stay:'🏠','Airport Pick-up':'✈️','Campus Visit':'🏫','Requires Clubs':'🏌'};
-  return (arr||[]).map(i=>`<span class="badge badge-green">${icons[i]||''} ${i}</span>`).join('');
+  return (arr||[]).map(i=>`<span class="badge badge-green">${INCLUSION_ICONS[i]||''} ${i}</span>`).join('');
 }
-function progBadge(p) {
-  const cls = p==='Annual Integrated'?'badge-elite'
+function progBadgeClass(p) {
+  return p==='Annual Integrated'?'badge-elite'
     : p==='Annual Golf and Fitness'?'badge-purple'
     : p==='Annual Only Golf'?'badge-teal'
     : p==='1 Month'?'badge-standard'
@@ -1480,8 +1495,10 @@ function progBadge(p) {
     : p==='Single Session'?'badge-orange'
     : p==='Campus Visit'?'badge-teal'
     : 'badge-gray'; // Other / unknown
+}
+function progBadge(p) {
   const label = p&&p.startsWith('Other: ') ? 'Other' : p;
-  return `<span class="badge ${cls}" title="${p}">${label}</span>`;
+  return `<span class="badge ${progBadgeClass(p)}" title="${p}">${label}</span>`;
 }
 function uid() { return 'b'+Date.now().toString(36)+Math.random().toString(36).substr(2,5); }
 function today() { return new Date().toISOString().split('T')[0]; }
@@ -1603,8 +1620,8 @@ function renderRevenue() {
 
 // Reads the filter bar (mode + month/range + programme + search) and returns
 // matching live bookings, sorted newest-arrival-first.
-function getGridFilteredBookings() {
-  const liveBookings=bookings.filter(b=>!b.isDraft);
+function getGridFilteredBookings(liveBookings) {
+  if(!liveBookings) liveBookings=bookings.filter(b=>!b.isDraft);
   const mode=(document.getElementById('grid-filter-mode')||{}).value||'all';
   const query=(document.getElementById('search-input')||{}).value||'';
   const progFilter=(document.getElementById('programme-filter')||{}).value||'';
@@ -1704,7 +1721,7 @@ function renderDashboard() {
   const query=(document.getElementById('search-input')||{}).value||'';
   const progFilter=(document.getElementById('programme-filter')||{}).value||'';
   const isFiltered=!!(query||progFilter);
-  const sorted=getGridFilteredBookings();
+  const sorted=getGridFilteredBookings(liveBookings);
   const container=document.getElementById('bookings-cards');
   if(!sorted.length){
     container.innerHTML=`<div class="empty-state"><div class="icon">📅</div><p>${query||progFilter?'No results found.':'No bookings yet. Create your first booking!'}</p></div>`;
@@ -1795,10 +1812,7 @@ function downloadPDF() {
 }
 
 function buildMonthlyPrintRows(list) {
-  const inclIcons = inc => {
-    const map = {'Golf':'⛳','Fitness':'🏋','Food':'🍽','Stay':'🏠','Airport Pick-up':'✈','Campus Visit':'🏫','Requires Clubs':'🏌'};
-    return (inc||[]).map(i=>map[i]||i).join(' ');
-  };
+  const inclIcons = inc => (inc||[]).map(i=>INCLUSION_ICONS[i]||i).join(' ');
   return list.map((b,i) => `
     <tr>
       <td style="text-align:center;font-weight:700;color:#021b3b">${i+1}</td>
@@ -1806,7 +1820,7 @@ function buildMonthlyPrintRows(list) {
         <div class="pt-name">${b.studentName}</div>
         <div class="pt-sub">${b.age||'—'} yrs · ${b.gender||'—'} · ${b.homeCity||'—'}</div>
       </td>
-      <td><span class="pt-badge ${b.programmeType?'badge-'+b.programmeType.toLowerCase().replace(/\s+/g,'-'):''}" style="background:#f3f9e6;color:#021b3b">${b.programmeType||'—'}</span></td>
+      <td><span class="pt-badge ${progBadgeClass(b.programmeType)}" style="background:#f3f9e6;color:#021b3b">${b.programmeType||'—'}</span></td>
       <td class="pt-date">${fmtDateShort(b.arrivalDate)}<br><span class="pt-sub">${fmtTime(b.arrivalTime)}</span></td>
       <td class="pt-date">${b.trainingStartDate?fmtDateShort(b.trainingStartDate):(b.trainingPeriod&&b.trainingPeriod.includes(' to ')?fmtDateShort(b.trainingPeriod.split(' to ')[0]):b.trainingPeriod||'—')}</td>
       <td class="pt-date">${b.trainingEndDate?fmtDateShort(b.trainingEndDate):(b.trainingPeriod&&b.trainingPeriod.includes(' to ')?fmtDateShort(b.trainingPeriod.split(' to ')[1]):'—')}</td>
@@ -2405,7 +2419,7 @@ function handOffToTeammate(fromStep){
   if(draft.specialNotes) lines.push('*Notes:* '+draft.specialNotes);
   lines.push('','Everything above is already filled in — open this link and the booking form opens pre-filled. Review, fill in anything missing, and submit:',link);
 
-  safeOpenLink('https://wa.me/?text='+encodeURIComponent(lines.join('\n')));
+  safeOpenLink(waLink('', lines.join('\n')));
   alert('Draft saved and WhatsApp opened — select who to send it to.');
   initBookingForm();
   showSection('monthly',document.querySelector('[data-section=monthly]'));
@@ -2421,6 +2435,11 @@ function deleteDraft(id){
     fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'deleteBooking',id}),headers:{'Content-Type':'text/plain'}});
   }
   renderDashboard();
+}
+
+function getPdfLinkForBooking(b) {
+  const isAnnual = (b.programmeType||'').toLowerCase().includes('annual');
+  return isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
 }
 
 function buildThingsToCarryMsg(b, pdfLink) {
@@ -2449,8 +2468,6 @@ function viewBooking(id) {
   if(!b) { alert('Booking not found: '+id); return; }
   const {opsMsg,accountsMsg,hospitalityMsg}=buildMessages(b);
   const inc=b.inclusions||[], hasHospitality=inc.includes('Food')||inc.includes('Stay'), hasAirport=inc.includes('Airport Pick-up');
-  const isSingleSession=(b.programmeType||'').toLowerCase().includes('single session');
-  const isAnnual=(b.programmeType||'').toLowerCase().includes('annual');
   const {base,misc,netFee,preGst,gst,discount,total,gstOn,discOn}=calcInvoice(b);
   // Store tcMsg globally so onclick handlers can access it safely without string-escaping issues
   window._tcBookingId = b.id;
@@ -2566,8 +2583,7 @@ function sendTravelWA(id) {
   }
   const msg = buildTravelMsg(b);
   const num = settings.waTransport || '';
-  const url = num ? `https://wa.me/${num}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-  safeOpenLink(url);
+  safeOpenLink(waLink(num, msg));
 }
 
 function saveTravelDetails(id) {
@@ -2589,22 +2605,10 @@ function saveTravelDetails(id) {
 
 function openWAWithMsg(encodedMsg, team, phone) {
   const msg=decodeURIComponent(encodedMsg);
-  const encoded=encodeURIComponent(msg);
-  if (team==='admin') {
-    const num=settings.waAdmin;
-    const url=num?`https://wa.me/${num}?text=${encoded}`:`https://wa.me/?text=${encoded}`;
-    safeOpenLink(url);
-    return;
-  }
-  if (team==='ops') {
-    const num=settings.waOps;
-    const url=num?`https://wa.me/${num}?text=${encoded}`:`https://wa.me/?text=${encoded}`;
-    safeOpenLink(url);
-    return;
-  }
-  const num = team==='accounts'?settings.waAccounts : team==='hospitality'?settings.waHospitality : team==='transport'?settings.waTransport : phone||'';
-  const url=num?`https://wa.me/${num}?text=${encoded}`:`https://wa.me/?text=${encoded}`;
-  safeOpenLink(url);
+  const num = team==='admin'?settings.waAdmin : team==='ops'?settings.waOps
+    : team==='accounts'?settings.waAccounts : team==='hospitality'?settings.waHospitality
+    : team==='transport'?settings.waTransport : phone||'';
+  safeOpenLink(waLink(num, msg));
 }
 
 function deleteBooking(id){
@@ -2674,8 +2678,7 @@ Reply here or call us. See you tomorrow! ⛳`
   };
   const msg=msgs[type]||'';
   const num=b.phone||'';
-  const url=num?`https://wa.me/${num}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
-  safeOpenLink(url);
+  safeOpenLink(waLink(num, msg));
 }
 
 function sendReminderEmail(bookingId, type) {
@@ -3118,6 +3121,13 @@ function safeOpenLink(url) {
   document.body.removeChild(a);
 }
 
+// Builds a wa.me link — with a target number if given, or the generic
+// "pick a chat" link if not. `msg` is the raw, unencoded message text.
+function waLink(num, msg) {
+  const encoded = encodeURIComponent(msg);
+  return num ? `https://wa.me/${num}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+}
+
 // Dispatch logs are stored in a dedicated localStorage key so they are NEVER
 // wiped by a loadFromSheet() call. _dlStore() reads/writes this store.
 function _dlStore(write, bookingId, key, value) {
@@ -3289,8 +3299,7 @@ function buildDispatchTableHtml(bookingId) {
   const subjAcc   = 'Invoice Request — ' + studentName;
   const subjHosp  = 'Hospitality — ' + studentName;
 
-  const isAnnual = (b.programmeType||'').toLowerCase().includes('annual');
-  const pdfLink = isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
+  const pdfLink = getPdfLinkForBooking(b);
 
   let rows = '';
 
@@ -3386,8 +3395,7 @@ function dispatchWA(bookingId, recipient, waKey, encMsg) {
     const msg = decodeURIComponent(encMsg);
     const numMap = {admin: settings.waAdmin, ops: settings.waOps, accounts: settings.waAccounts, hospitality: settings.waHospitality, transport: settings.waTransport};
     const num = numMap[waKey] || numMap[recipient] || '';
-    const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
-    safeOpenLink(url);
+    safeOpenLink(waLink(num, msg));
     dlLog(bookingId, recipient, 'wa');
     renderDispatchTable(bookingId);
     renderDashboard();
@@ -3413,8 +3421,7 @@ function dispatchTransportWA(bookingId) {
     if (!b) { _showSyncToast('Booking not found — try refreshing.', true); return; }
     const msg = buildTravelMsg(b);
     const num = settings.waTransport || '';
-    const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
-    safeOpenLink(url);
+    safeOpenLink(waLink(num, msg));
     dlLog(bookingId, 'transport', 'wa');
     renderDispatchTable(bookingId);
     renderDashboard();
@@ -3426,12 +3433,10 @@ function dispatchTCWA(bookingId) {
   try {
     const b = bookings.find(x => x.id === bookingId);
     if (!b) { _showSyncToast('Booking not found — try refreshing.', true); return; }
-    const isAnnual = (b.programmeType||'').toLowerCase().includes('annual');
-    const pdfLink = isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
+    const pdfLink = getPdfLinkForBooking(b);
     const msg = buildThingsToCarryMsg(b, pdfLink);
     const num = b.phone || '';
-    const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
-    safeOpenLink(url);
+    safeOpenLink(waLink(num, msg));
     dlLog(bookingId, 'parent', 'tc_wa');
     renderDispatchTable(bookingId);
     renderDashboard();
@@ -3449,8 +3454,7 @@ function dispatchVSFWA(bookingId) {
       `Please check your email and fill in the Visiting Student Form that has been sent to you. This is required to confirm your booking.\n\n` +
       `Warm regards,\nTSG Academy`;
     const num = b.phone || '';
-    const url = num ? 'https://wa.me/' + num + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
-    safeOpenLink(url);
+    safeOpenLink(waLink(num, msg));
     dlMarkVSF(bookingId);
   } catch(e) { _showSyncToast('Error: ' + e.message, true); console.error('dispatchVSFWA error:', e); }
 }
