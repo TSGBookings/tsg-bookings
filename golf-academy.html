@@ -237,6 +237,18 @@ textarea { resize: vertical; min-height: 80px; }
   .step-label { display: none; }
   .step-line { margin: 0 8px; }
 
+  /* Wizard step footers (Save/Hand Off/Next buttons): stacking these full-width
+     avoids 2-3 buttons cramming into one row and wrapping to 3 lines of text,
+     which was tall enough to get clipped under the bottom tab bar. */
+  #step-content .flex.mt-20,
+  #step-content .flex.mt-20 .ml-auto.flex {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  #step-content .flex.mt-20 .ml-auto { margin-left: 0; width: 100%; }
+  #step-content .flex.mt-20 button { width: 100%; justify-content: center; }
+
   /* Monthly grid checkin rows: stack */
   .checkin-row {
     grid-template-columns: 60px 1fr;
@@ -338,7 +350,10 @@ textarea { resize: vertical; min-height: 80px; }
   }
 }
 
-@media (max-width: 900px) {
+/* Tablet range only — phones (<=768px) get the bottom-tab-bar treatment
+   above instead; without this lower bound these two blocks overlapped and,
+   since this one is declared later, it silently won on every phone too. */
+@media (min-width: 769px) and (max-width: 900px) {
   .sidebar { width: 64px; }
   .main { margin-left: 64px; padding: 18px; }
   .nav-label { display: none; }
