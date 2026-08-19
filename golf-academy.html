@@ -1954,11 +1954,11 @@ function step2HTML() {
         </div>
         <div class="form-group"><label>Arrival Date *</label><input id="f-arrival" type="date" value="${f.arrivalDate||''}" onchange="toggleDepartSessionField()"></div>
         <div class="form-group"><label>Arrival Time</label><input id="f-atime" type="time" value="${fmtTime(f.arrivalTime)}"></div>
-        <div class="form-group"><label>Training Start Date</label><input id="f-train-start" type="date" value="${f.trainingStartDate||''}"></div>
-        <div class="form-group"><label>Training End Date</label><input id="f-train-end" type="date" value="${f.trainingEndDate||''}"></div>
+        <div class="form-group"><label>Training Start Date</label><input id="f-train-start" type="date" value="${f.trainingStartDate||''}" onchange="toggleDepartSessionField()"></div>
+        <div class="form-group"><label>Training End Date</label><input id="f-train-end" type="date" value="${f.trainingEndDate||''}" onchange="toggleDepartSessionField()"></div>
         <div class="form-group"><label>Training Period</label><input id="f-period" value="${f.trainingPeriod||''}" placeholder="e.g. 2 weeks"></div>
         <div class="form-group"><label>Departure Date *</label><input id="f-departure" type="date" value="${f.departureDate||''}" onchange="toggleDepartSessionField()"></div>
-        <div class="form-group" id="depart-session-field" style="${f.arrivalDate&&f.arrivalDate===f.departureDate?'':'display:none'}">
+        <div class="form-group" id="depart-session-field" style="${isSameDayDeparture(f.arrivalDate,f.trainingStartDate,f.trainingEndDate,f.departureDate)?'':'display:none'}">
           <label>Departing After</label>
           <select id="f-depart-session">
             <option value="">Select</option>
@@ -2091,11 +2091,22 @@ function toggleHeightField() {
   if(field) field.style.display=(cb&&cb.checked)?'':'none';
 }
 
+// True when the departure date lands on the same day as arrival OR either
+// training date — i.e. any day the student could plausibly still be on
+// campus for a session before leaving. Used both for the initial render
+// (step2HTML template) and for the live onchange toggle below.
+function isSameDayDeparture(arrival,trainStart,trainEnd,departure){
+  if(!departure) return false;
+  return departure===arrival||departure===trainStart||departure===trainEnd;
+}
+
 function toggleDepartSessionField() {
   const arrival=(document.getElementById('f-arrival')||{}).value||'';
+  const trainStart=(document.getElementById('f-train-start')||{}).value||'';
+  const trainEnd=(document.getElementById('f-train-end')||{}).value||'';
   const departure=(document.getElementById('f-departure')||{}).value||'';
   const field=document.getElementById('depart-session-field');
-  if(field) field.style.display=(arrival&&arrival===departure)?'':'none';
+  if(field) field.style.display=isSameDayDeparture(arrival,trainStart,trainEnd,departure)?'':'none';
 }
 
 // Pre-fills the programme fee from the selected programme's default fee and locks
@@ -2150,7 +2161,7 @@ async function s2Next() {
     trainingEndDate:document.getElementById('f-train-end').value,
     trainingPeriod:document.getElementById('f-period').value,
     departureDate:departure,
-    departSession:arrival===departure?(document.getElementById('f-depart-session')||{}).value||'':'',
+    departSession:isSameDayDeparture(arrival,document.getElementById('f-train-start').value,document.getElementById('f-train-end').value,departure)?(document.getElementById('f-depart-session')||{}).value||'':'',
     specialNotes:document.getElementById('f-notes').value,
     travellerName:document.getElementById('f-trav-name').value,
     travellerContact:document.getElementById('f-trav-contact').value,
@@ -2325,28 +2336,29 @@ function persistBooking() {
   const f=formData;
   const {reminderDate}=buildMessages(f);
   let booking;
-  if(editingBookingId){
-    const idx=bookings.findIndex(b=>b.id===editingBookingId);
-    if(idx>=0){
-      const existing=bookings[idx];
-      booking={
-        ...existing, ...f, id:existing.id, isDraft:false, dispatched:true,
-        dispatchLog: Object.assign({}, f.dispatchLog || {}, existing.dispatchLog || {}),
-        reminders: (()=>{
-          // Always re-calculate dueDate in case arrival date changed
-          const oldReminders = (existing.reminders && existing.reminders.length && !existing.isDraft) ? existing.reminders : [];
-          const defaults = [
-            {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:reminderDate,done:false},
-            {type:'parent-call',label:'Parent Confirmation Call',dueDate:reminderDate,done:false}
-          ];
-          if(!oldReminders.length) return defaults;
-          // Keep done status but update dueDate to reflect new arrival date
-          return defaults.map(def=>{const old=oldReminders.find(r=>r.type===def.type);return old?{...def,done:old.done}:def;});
-        })()
-      };
-      bookings[idx]=booking;
-    }
+  const idx=editingBookingId?bookings.findIndex(b=>b.id===editingBookingId):-1;
+  if(idx>=0){
+    const existing=bookings[idx];
+    booking={
+      ...existing, ...f, id:existing.id, isDraft:false, dispatched:true,
+      dispatchLog: Object.assign({}, f.dispatchLog || {}, existing.dispatchLog || {}),
+      reminders: (()=>{
+        // Always re-calculate dueDate in case arrival date changed
+        const oldReminders = (existing.reminders && existing.reminders.length && !existing.isDraft) ? existing.reminders : [];
+        const defaults = [
+          {type:'things-to-carry',label:'Things to Carry Checklist',dueDate:reminderDate,done:false},
+          {type:'parent-call',label:'Parent Confirmation Call',dueDate:reminderDate,done:false}
+        ];
+        if(!oldReminders.length) return defaults;
+        // Keep done status but update dueDate to reflect new arrival date
+        return defaults.map(def=>{const old=oldReminders.find(r=>r.type===def.type);return old?{...def,done:old.done}:def;});
+      })()
+    };
+    bookings[idx]=booking;
   } else {
+    // Also covers editingBookingId pointing at a record that no longer exists
+    // (e.g. deleted elsewhere while this device had it open) — create fresh
+    // rather than silently losing what was just filled in.
     booking={
       id:uid(), ...f, createdAt:today(), dispatched:true, isDraft:false,
       reminders:[
@@ -2521,8 +2533,10 @@ function captureFormData(fromStep){
         departureDate:(document.getElementById('f-departure')||{}).value||formData.departureDate||'',
         departSession:(function(){
           var a=(document.getElementById('f-arrival')||{}).value||'';
+          var ts=(document.getElementById('f-train-start')||{}).value||'';
+          var te=(document.getElementById('f-train-end')||{}).value||'';
           var d=(document.getElementById('f-departure')||{}).value||'';
-          return (a&&a===d)?((document.getElementById('f-depart-session')||{}).value||''):'';
+          return isSameDayDeparture(a,ts,te,d)?((document.getElementById('f-depart-session')||{}).value||''):'';
         })(),
         travellerName:(document.getElementById('f-trav-name')||{}).value||formData.travellerName||'',
         travellerContact:(document.getElementById('f-trav-contact')||{}).value||formData.travellerContact||'',
