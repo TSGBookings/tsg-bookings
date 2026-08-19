@@ -1850,7 +1850,10 @@ function downloadPDF() {
 }
 
 function buildMonthlyPrintRows(list) {
-  const inclIcons = inc => (inc||[]).map(i=>INCLUSION_ICONS[i]||i).join(' ');
+  const inclIcons = b => (b.inclusions||[]).map(i=>{
+    const icon = INCLUSION_ICONS[i]||i;
+    return (i==='Requires Clubs' && b.heightCm) ? icon+'<span style="letter-spacing:normal;font-size:11px"> ('+b.heightCm+'cm)</span>' : icon;
+  }).join(' ');
   return list.map((b,i) => `
     <tr>
       <td style="text-align:center;font-weight:700;color:#021b3b">${i+1}</td>
@@ -1863,7 +1866,7 @@ function buildMonthlyPrintRows(list) {
       <td class="pt-date">${b.trainingStartDate?fmtDateShort(b.trainingStartDate):(b.trainingPeriod&&b.trainingPeriod.includes(' to ')?fmtDateShort(b.trainingPeriod.split(' to ')[0]):b.trainingPeriod||'—')}</td>
       <td class="pt-date">${b.trainingEndDate?fmtDateShort(b.trainingEndDate):(b.trainingPeriod&&b.trainingPeriod.includes(' to ')?fmtDateShort(b.trainingPeriod.split(' to ')[1]):'—')}</td>
       <td class="pt-date">${fmtDateShort(b.departureDate)}</td>
-      <td class="pt-incl">${inclIcons(b.inclusions)||'—'}</td>
+      <td class="pt-incl">${inclIcons(b)||'—'}</td>
       <td>
         <div class="pt-parent">${b.parentName||'—'}</div>
         <div class="pt-phone">${b.phone||''}</div>
@@ -1949,12 +1952,21 @@ function step2HTML() {
           <label>Please specify programme details</label>
           <input id="f-prog-other" value="${f.programmeTypeOther||''}" placeholder="Describe the programme…">
         </div>
-        <div class="form-group"><label>Arrival Date *</label><input id="f-arrival" type="date" value="${f.arrivalDate||''}"></div>
+        <div class="form-group"><label>Arrival Date *</label><input id="f-arrival" type="date" value="${f.arrivalDate||''}" onchange="toggleDepartSessionField()"></div>
         <div class="form-group"><label>Arrival Time</label><input id="f-atime" type="time" value="${fmtTime(f.arrivalTime)}"></div>
         <div class="form-group"><label>Training Start Date</label><input id="f-train-start" type="date" value="${f.trainingStartDate||''}"></div>
         <div class="form-group"><label>Training End Date</label><input id="f-train-end" type="date" value="${f.trainingEndDate||''}"></div>
         <div class="form-group"><label>Training Period</label><input id="f-period" value="${f.trainingPeriod||''}" placeholder="e.g. 2 weeks"></div>
-        <div class="form-group"><label>Departure Date *</label><input id="f-departure" type="date" value="${f.departureDate||''}"></div>
+        <div class="form-group"><label>Departure Date *</label><input id="f-departure" type="date" value="${f.departureDate||''}" onchange="toggleDepartSessionField()"></div>
+        <div class="form-group" id="depart-session-field" style="${f.arrivalDate&&f.arrivalDate===f.departureDate?'':'display:none'}">
+          <label>Departing After</label>
+          <select id="f-depart-session">
+            <option value="">Select</option>
+            <option ${f.departSession==='1st Session'?'selected':''}>1st Session</option>
+            <option ${f.departSession==='2nd Session'?'selected':''}>2nd Session</option>
+            <option ${f.departSession==='3rd Session'?'selected':''}>3rd Session</option>
+          </select>
+        </div>
         <div class="form-group full">
           <label>Inclusions</label>
           <div class="checkbox-group">${incItems.map(item=>{const id='inc-'+item.k.replace(' ','-');const extra=item.k==='Requires Clubs'?' onchange="toggleHeightField()"':'';return `<label class="checkbox-item"><input type="checkbox" id="${id}" ${inc.includes(item.k)?'checked':''}${extra}><span>${item.icon} ${item.k}</span></label>`;}).join('')}</div>
@@ -2079,6 +2091,13 @@ function toggleHeightField() {
   if(field) field.style.display=(cb&&cb.checked)?'':'none';
 }
 
+function toggleDepartSessionField() {
+  const arrival=(document.getElementById('f-arrival')||{}).value||'';
+  const departure=(document.getElementById('f-departure')||{}).value||'';
+  const field=document.getElementById('depart-session-field');
+  if(field) field.style.display=(arrival&&arrival===departure)?'':'none';
+}
+
 // Pre-fills the programme fee from the selected programme's default fee and locks
 // the field until the user confirms they need to edit it.
 function autofillProgrammeFee() {
@@ -2114,8 +2133,7 @@ async function s2Next() {
   if(!progVal){alert('Please select a Programme Type.');return;}
   const arrival=document.getElementById('f-arrival').value, departure=document.getElementById('f-departure').value;
   if(!arrival||!departure){alert('Arrival and departure dates are required.');return;}
-  const allowSameDay=['campus visit','single session'].some(t=>progVal.toLowerCase().includes(t));
-  if(allowSameDay?arrival>departure:arrival>=departure){alert('Departure date must be on or after arrival date.');return;}
+  if(arrival>departure){alert('Departure date must be on or after arrival date.');return;}
   Object.assign(formData,{
     programmeType:(function(){ var v=progVal; if(v==='Other'){var o=(document.getElementById('f-prog-other')||{}).value||''; return o?'Other: '+o:'Other';} return v; })(),
     programmeTypeOther:(document.getElementById('f-prog-other')||{}).value||'',
@@ -2131,7 +2149,9 @@ async function s2Next() {
     trainingStartDate:document.getElementById('f-train-start').value,
     trainingEndDate:document.getElementById('f-train-end').value,
     trainingPeriod:document.getElementById('f-period').value,
-    departureDate:departure, specialNotes:document.getElementById('f-notes').value,
+    departureDate:departure,
+    departSession:arrival===departure?(document.getElementById('f-depart-session')||{}).value||'':'',
+    specialNotes:document.getElementById('f-notes').value,
     travellerName:document.getElementById('f-trav-name').value,
     travellerContact:document.getElementById('f-trav-contact').value,
     flightArrivalTime:document.getElementById('f-flight-time').value,
@@ -2235,7 +2255,7 @@ function buildMessages(f) {
 📧 Email: ${f.email||'—'}
 
 📅 Arrival: ${fmtDate(f.arrivalDate)} at ${fmtTime(f.arrivalTime)||'TBD'}
-📅 Departure: ${fmtDate(f.departureDate)}
+📅 Departure: ${fmtDate(f.departureDate)}${f.departSession?' (same-day — departing after '+f.departSession+')':''}
 🏌️ Training: ${f.trainingStartDate?fmtDate(f.trainingStartDate)+' → '+fmtDate(f.trainingEndDate):f.trainingPeriod||'—'}
 🏌️ Programme: ${f.programmeType||'Not set'}
 ✅ Inclusions: ${inc.join(', ')||'—'}
@@ -2365,14 +2385,14 @@ function editBooking(id){
 // (formDataBaseline): fields nobody else touched merge automatically; fields
 // BOTH sides touched (to different values) are shown to the user to resolve.
 const STEP1_FIELDS=['studentName','age','gender','homeCity','parentName','phone','email'];
-const STEP2_FIELDS=['programmeType','programmeTypeOther','invoiceAmount','miscFees','gstApplicable','discountApplicable','discountAmount','accountsNotes','inclusions','heightCm','arrivalDate','arrivalTime','trainingStartDate','trainingEndDate','trainingPeriod','departureDate','travellerName','travellerContact','flightArrivalTime','terminal','accompanyingStaff','flightNo','specialNotes'];
+const STEP2_FIELDS=['programmeType','programmeTypeOther','invoiceAmount','miscFees','gstApplicable','discountApplicable','discountAmount','accountsNotes','inclusions','heightCm','arrivalDate','arrivalTime','trainingStartDate','trainingEndDate','trainingPeriod','departureDate','departSession','travellerName','travellerContact','flightArrivalTime','terminal','accompanyingStaff','flightNo','specialNotes'];
 const FIELD_LABELS={
   studentName:'Student Name', age:'Age', gender:'Gender', homeCity:'Home City', parentName:'Parent Name', phone:'Phone', email:'Email',
   programmeType:'Programme Type', programmeTypeOther:'Programme (Other)', invoiceAmount:'Programme Fee', miscFees:'Misc Fees',
   gstApplicable:'GST Applicable', discountApplicable:'Discount Applicable', discountAmount:'Discount Amount', accountsNotes:'Accounts Notes',
   inclusions:'Inclusions', heightCm:'Height (cm)', arrivalDate:'Arrival Date', arrivalTime:'Arrival Time',
   trainingStartDate:'Training Start', trainingEndDate:'Training End', trainingPeriod:'Training Period', departureDate:'Departure Date',
-  travellerName:'Traveller Name', travellerContact:'Traveller Contact', flightArrivalTime:'Flight Arrival Time', terminal:'Terminal',
+  departSession:'Departing After', travellerName:'Traveller Name', travellerContact:'Traveller Contact', flightArrivalTime:'Flight Arrival Time', terminal:'Terminal',
   accompanyingStaff:'TSG Staff Pickup', flightNo:'Flight/Train No.', specialNotes:'Special Notes'
 };
 
@@ -2499,6 +2519,11 @@ function captureFormData(fromStep){
         trainingEndDate:(document.getElementById('f-train-end')||{}).value||formData.trainingEndDate||'',
         trainingPeriod:(document.getElementById('f-period')||{}).value||formData.trainingPeriod||'',
         departureDate:(document.getElementById('f-departure')||{}).value||formData.departureDate||'',
+        departSession:(function(){
+          var a=(document.getElementById('f-arrival')||{}).value||'';
+          var d=(document.getElementById('f-departure')||{}).value||'';
+          return (a&&a===d)?((document.getElementById('f-depart-session')||{}).value||''):'';
+        })(),
         travellerName:(document.getElementById('f-trav-name')||{}).value||formData.travellerName||'',
         travellerContact:(document.getElementById('f-trav-contact')||{}).value||formData.travellerContact||'',
         flightArrivalTime:(document.getElementById('f-flight-time')||{}).value||formData.flightArrivalTime||'',
@@ -2819,7 +2844,7 @@ This is a friendly reminder that ${b.studentName}'s ${b.programmeType} programme
 
 📅 Arrival: ${fmtDate(b.arrivalDate)} at ${fmtTime(b.arrivalTime)||'TBD'}
 🗓 Training: ${b.trainingPeriod||'—'}
-📅 Departure: ${fmtDate(b.departureDate)}
+📅 Departure: ${fmtDate(b.departureDate)}${b.departSession?' (departing after '+b.departSession+')':''}
 
 Please confirm:
 1. Arrival time & transport arrangement
