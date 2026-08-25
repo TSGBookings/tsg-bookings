@@ -1197,7 +1197,7 @@ let settings = {
   emailOps: 'rohit@tsgolf.in',
   emailAccounts: 'accounts@tsgolf.in',
   emailHospitality: 'ajo@tsgolf.in',
-  sheetUrl: 'https://script.google.com/macros/s/AKfycbwFcTyTUrU3_ombpZhQtYgDW6jAaL4P6Khlpow0QIbzUwMMYdHsNDb_o3mB_yFeKE6_/exec',
+  sheetUrl: 'https://script.google.com/macros/s/AKfycbwxXtuFfFFSJijzQO7cu7_8YNz70qKwuUCGrddEpoMII3RZOEIHLpX-eCi4QHEnGnPF/exec',
   programmeTypes: [
     {name:'1 Week', fee:''},
     {name:'1 Month', fee:''},
@@ -1247,6 +1247,7 @@ function loadState() {
       bookings = [];
       renderDashboard();
       loadFromSheet();
+      loadProgrammeTypesFromSheet();
     } else {
       // No sheet — fall back to localStorage
       const saved = localStorage.getItem('golf_bookings_v5');
@@ -1404,6 +1405,44 @@ function applySettingsToUI() {
 }
 
 // ===================== PROGRAMME TYPES =====================
+// Programme fees are shared across every device via the same Google Sheet the
+// bookings use (a dedicated ProgrammeTypes tab) — otherwise each device's
+// localStorage drifts independently and fee autofill only works on whichever
+// device the fees were originally entered on.
+async function loadProgrammeTypesFromSheet() {
+  if (!settings.sheetUrl) return;
+  try {
+    const url = settings.sheetUrl + '?action=getProgrammeTypes&t=' + Date.now();
+    const resp = await fetch(url, {method:'GET', mode:'cors'});
+    if (!resp.ok) { console.warn('Programme types load failed:', resp.status); return; }
+    const data = await resp.json();
+    if (!data.programmeTypes || !Array.isArray(data.programmeTypes) || !data.programmeTypes.length) return;
+    settings.programmeTypes = data.programmeTypes;
+    localStorage.setItem('golf_settings_v2', JSON.stringify(settings));
+    renderProgrammeTypesSettings();
+    renderProgrammeFilterOptions();
+    // Refresh the live select if the booking form happens to be open
+    if (document.getElementById('f-prog')) renderStep();
+  } catch(e) {
+    console.warn('Programme types load failed, using local cache:', e.message);
+  }
+}
+
+function syncProgrammeTypesToSheet() {
+  if (!settings.sheetUrl) return;
+  const body = JSON.stringify({action:'saveProgrammeTypes', programmeTypes: settings.programmeTypes || []});
+  // Fire both: sendBeacon can report success without actually delivering (seen
+  // in practice from a local file:// page), so it's not trustworthy on its own
+  // as a reason to skip the fetch. The backend does a full overwrite either way,
+  // so a duplicate write from both is harmless.
+  if (navigator.sendBeacon) {
+    try { navigator.sendBeacon(settings.sheetUrl, new Blob([body],{type:'text/plain'})); }
+    catch(e) { /* ignore — fetch below still runs */ }
+  }
+  fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body,headers:{'Content-Type':'text/plain'}})
+    .catch(e => console.warn('Programme types sync failed:', e.message));
+}
+
 function renderProgrammeTypesSettings() {
   const list = document.getElementById('programme-types-list');
   if (!list) return;
@@ -1428,6 +1467,7 @@ function addProgrammeType() {
   nameEl.value=''; feeEl.value='';
   renderProgrammeTypesSettings();
   renderProgrammeFilterOptions();
+  syncProgrammeTypesToSheet();
 }
 
 function updateProgrammeType(i, field, value) {
@@ -1435,6 +1475,7 @@ function updateProgrammeType(i, field, value) {
   settings.programmeTypes[i][field]=value;
   localStorage.setItem('golf_settings_v2', JSON.stringify(settings));
   if(field==='name') renderProgrammeFilterOptions();
+  syncProgrammeTypesToSheet();
 }
 
 function deleteProgrammeType(i) {
@@ -1444,6 +1485,7 @@ function deleteProgrammeType(i) {
   localStorage.setItem('golf_settings_v2', JSON.stringify(settings));
   renderProgrammeTypesSettings();
   renderProgrammeFilterOptions();
+  syncProgrammeTypesToSheet();
 }
 
 // Options for the New Booking "Programme Type" select. "Other" is always last & fixed.
@@ -2807,10 +2849,16 @@ function deleteBooking(id){
   saveState();
   closeModal();
   renderDashboard();
-  // Sync deletion to Google Sheet
+  // Sync deletion to Google Sheet — fire both sendBeacon and fetch (sendBeacon's
+  // return value only means "queued", not "delivered"; deleteBooking is
+  // idempotent server-side so a duplicate call is harmless).
   if(settings.sheetUrl){
-    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'deleteBooking',id:id})})
+    const delBody=JSON.stringify({action:'deleteBooking',id:id});
+    if(navigator.sendBeacon){
+      try{ navigator.sendBeacon(settings.sheetUrl,new Blob([delBody],{type:'text/plain'})); }
+      catch(e){ /* ignore — fetch below still runs */ }
+    }
+    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:delBody})
     .catch(e=>console.warn('Delete sync failed:',e.message));
   }
 }
@@ -2928,9 +2976,21 @@ function _showSyncToast(msg, isError) {
 
 async function syncToSheets(booking){
   if(!settings.sheetUrl)return;
+  const body=JSON.stringify({action:'addBooking',booking});
+  // Fire both sendBeacon and fetch. sendBeacon survives the tab being
+  // backgrounded/suspended right after this call (e.g. tapping the Step 3
+  // WhatsApp button on mobile hands off to the native app mid-request, which
+  // kills a plain fetch), but its return value only means "queued", not
+  // "delivered" — it can report success without ever reaching the server
+  // (seen in practice from a local file:// page). The backend upserts by
+  // booking id either way, so a duplicate write from both is harmless.
+  if(navigator.sendBeacon){
+    try{ navigator.sendBeacon(settings.sheetUrl,new Blob([body],{type:'text/plain'})); }
+    catch(e){ /* ignore — fetch below still runs */ }
+  }
   try{
     // no-cors: request reaches server even though we can't read the response body
-    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'addBooking',booking}),headers:{'Content-Type':'text/plain'}})
+    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body,headers:{'Content-Type':'text/plain'}})
       .catch(e=>{ console.warn('Sheets sync failed:',e); _showSyncToast('⚠️ Sheet sync failed — check your connection. Data saved locally.', true); });
   }catch(e){console.warn('Sheets sync failed:',e); _showSyncToast('⚠️ Sheet sync failed — data saved locally.', true);}
 }
