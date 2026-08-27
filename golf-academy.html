@@ -424,7 +424,7 @@ textarea { resize: vertical; min-height: 80px; }
           <input id="search-input" type="text" placeholder="Search student..." style="padding:6px 12px;font-size:13px;width:160px" oninput="renderDashboard()">
           <div class="ml-auto flex gap-8">
             <button class="btn btn-pdf btn-sm" onclick="downloadPDF()">⬇ Download PDF</button>
-            <button class="btn btn-primary btn-sm" onclick="showSection('booking', document.querySelector('[data-section=booking]'))">+ New Booking</button>
+            <button class="btn btn-primary btn-sm" onclick="newBooking()">+ New Booking</button>
           </div>
         </div>
         <div id="bookings-cards"></div>
@@ -1515,7 +1515,21 @@ function showSection(name, el) {
   document.getElementById('section-' + name).classList.add('active');
   if (el) el.classList.add('active');
   if (name==='monthly') renderDashboard();
-  if (name==='booking') initBookingForm();
+  if (name==='booking') {
+    // Don't wipe an edit/draft that's already in progress — only start fresh when
+    // there's genuinely nothing on the go. "+ New Booking" forces a reset via
+    // newBooking(); editBooking()/hand-off links re-seed state themselves.
+    const workInProgress = editingBookingId || (formData && Object.keys(formData).length);
+    if (workInProgress) renderStep();
+    else initBookingForm();
+  }
+}
+
+// "+ New Booking" — always start from a blank form, even if a completed booking's
+// data is still sitting in formData from the last run.
+function newBooking() {
+  initBookingForm();
+  showSection('booking', document.querySelector('[data-section=booking]'));
 }
 
 // ===================== HELPERS =====================
@@ -2484,9 +2498,8 @@ function editBooking(id){
   const b=bookings.find(x=>x.id===id);
   if(!b) return;
   closeModal();
-  // Navigate first — showSection->initBookingForm clears state
   showSection('booking',document.querySelector('[data-section=booking]'));
-  // Now seed the editing state and re-render
+  // Seed the editing state explicitly (overrides whatever showSection rendered)
   editingBookingId=id;
   formData=JSON.parse(JSON.stringify(b));
   formDataBaseline=JSON.parse(JSON.stringify(b));
@@ -2605,7 +2618,7 @@ function captureFormData(fromStep){
     const name=(document.getElementById('f-name')||{}).value||'';
     const parent=(document.getElementById('f-parent')||{}).value||'';
     Object.assign(formData,{
-      studentName:name||formData.studentName||'(Untitled draft)',
+      studentName:name||formData.studentName||'',
       age:(document.getElementById('f-age')||{}).value||formData.age||'',
       gender:(document.getElementById('f-gender')||{}).value||formData.gender||'',
       homeCity:(document.getElementById('f-city')||{}).value||formData.homeCity||'',
@@ -2658,9 +2671,21 @@ function captureFormData(fromStep){
 // Persists formData as a draft booking and syncs it to the shared sheet.
 // Returns the saved booking, or null if the user cancelled (no student name).
 function persistDraft(fromStep){
-  if(!formData.studentName||!formData.studentName.trim()){
+  const f=formData;
+  // Guard against saving a hollow shell — this is what was spawning waves of
+  // "(Untitled draft)" rows on the shared sheet when the form got navigated away
+  // from with an orphaned (editingBookingId === null) state.
+  if(!editingBookingId){
+    const hasAnything=(f.studentName&&f.studentName.trim())||(f.parentName&&f.parentName.trim())
+      ||f.phone||f.homeCity||f.programmeType||f.arrivalDate||f.departureDate||f.invoiceAmount;
+    if(!hasAnything){
+      alert('Nothing to save yet — enter at least a student or parent name first.');
+      return null;
+    }
+  }
+  if(!f.studentName||!f.studentName.trim()){
     if(!confirm('No student name entered. Save as untitled draft?'))return null;
-    formData.studentName='(Untitled draft)';
+    f.studentName='(Untitled draft)';
   }
   let draftToSync;
   if(editingBookingId){
@@ -3845,6 +3870,11 @@ async function doLogin() {
   if (settings.sheetUrl && !window._syncInterval) {
     window._syncInterval = setInterval(async () => {
       if (document.querySelector('.modal-overlay.open')) return;
+      // Don't swap the bookings array out from under an in-progress booking edit —
+      // that's how edits got orphaned and re-saved as fresh drafts.
+      const bookingSection = document.getElementById('section-booking');
+      if (bookingSection && bookingSection.classList.contains('active') &&
+          (editingBookingId || (formData && Object.keys(formData).length))) return;
       // Skip refresh if a local write happened in the last 30 seconds — avoids
       // overwriting dispatch log changes before the sheet POST has been processed
       if (window._lastWriteTime && (Date.now() - window._lastWriteTime) < 30000) return;
