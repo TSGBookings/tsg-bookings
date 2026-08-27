@@ -1545,6 +1545,8 @@ function fmtTime(t) {
   try {
     var s = String(t).trim();
     if (!s) return '';
+    // Explicit "to be confirmed" sentinel — kept short for compact UI slots
+    if (s.toUpperCase() === 'TBC') return 'TBC';
     // Already HH:MM
     if (/^\d{1,2}:\d{2}$/.test(s)) return s;
     // Full date string like "Sat Dec 30 1899 14:00:00 GMT+0521..."
@@ -1557,6 +1559,11 @@ function fmtTime(t) {
     }
     return '';
   } catch(e) { return ''; }
+}
+// Roomy label for a campus arrival time: spells out "To Be Confirmed" for the
+// TBC sentinel, shows the time if known, and falls back to "TBD" when unset.
+function arrTimeLabel(t) {
+  return String(t || '').toUpperCase() === 'TBC' ? 'To Be Confirmed' : (fmtTime(t) || 'TBD');
 }
 // Single source of truth for inclusion icons — used both for dashboard/monthly
 // badges (inclBadges) and the monthly PDF print table (buildMonthlyPrintRows).
@@ -1995,7 +2002,14 @@ function step2HTML() {
           <input id="f-prog-other" value="${f.programmeTypeOther||''}" placeholder="Describe the programme…">
         </div>
         <div class="form-group"><label>Arrival Date *</label><input id="f-arrival" type="date" value="${f.arrivalDate||''}" onchange="toggleDepartSessionField()"></div>
-        <div class="form-group"><label>Arrival Time</label><input id="f-atime" type="time" value="${fmtTime(f.arrivalTime)}"></div>
+        <div class="form-group">
+          <label>Time of Arrival on Campus</label>
+          <select id="f-atime-mode" onchange="toggleArrivalTimeMode()">
+            <option value="known" ${f.arrivalTime!=='TBC'?'selected':''}>Known time</option>
+            <option value="tbc" ${f.arrivalTime==='TBC'?'selected':''}>To Be Confirmed</option>
+          </select>
+          <input id="f-atime" type="time" value="${f.arrivalTime&&f.arrivalTime!=='TBC'?fmtTime(f.arrivalTime):''}" style="margin-top:6px;${f.arrivalTime==='TBC'?'display:none':''}">
+        </div>
         <div class="form-group"><label>Training Start Date</label><input id="f-train-start" type="date" value="${f.trainingStartDate||''}" onchange="toggleDepartSessionField()"></div>
         <div class="form-group"><label>Training End Date</label><input id="f-train-end" type="date" value="${f.trainingEndDate||''}" onchange="toggleDepartSessionField()"></div>
         <div class="form-group"><label>Training Period</label><input id="f-period" value="${f.trainingPeriod||''}" placeholder="e.g. 2 weeks"></div>
@@ -2011,7 +2025,7 @@ function step2HTML() {
         </div>
         <div class="form-group full">
           <label>Inclusions</label>
-          <div class="checkbox-group">${incItems.map(item=>{const id='inc-'+item.k.replace(' ','-');const extra=item.k==='Requires Clubs'?' onchange="toggleHeightField()"':'';return `<label class="checkbox-item"><input type="checkbox" id="${id}" ${inc.includes(item.k)?'checked':''}${extra}><span>${item.icon} ${item.k}</span></label>`;}).join('')}</div>
+          <div class="checkbox-group">${incItems.map(item=>{const id='inc-'+item.k.replace(' ','-');const extra=item.k==='Requires Clubs'?' onchange="toggleHeightField()"':item.k==='Airport Pick-up'?' onchange="toggleTravelSection()"':'';return `<label class="checkbox-item"><input type="checkbox" id="${id}" ${inc.includes(item.k)?'checked':''}${extra}><span>${item.icon} ${item.k}</span></label>`;}).join('')}</div>
         </div>
         <div class="form-group" id="height-field" style="${inc.includes('Requires Clubs')?'':'display:none'}">
           <label>Height (cm) — for club fitting</label>
@@ -2021,9 +2035,14 @@ function step2HTML() {
       </div>
     </div>
 
-    <div class="wizard-section wizard-section-travel">
-      <div class="card-title">✈️ Travel / Airport Pickup Details</div>
-      <div class="form-grid">
+    <div class="wizard-section wizard-section-travel" id="travel-section-wrap">
+      <div class="card-title" id="travel-section-header" onclick="toggleTravelSection(true)" style="cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:0">
+        <span id="travel-section-chev">${inc.includes('Airport Pick-up')?'▾':'▸'}</span>
+        <span>✈️ Travel / Airport Pickup Details</span>
+        <span id="travel-section-req" style="font-size:11px;font-weight:600;color:#c2410c;${inc.includes('Airport Pick-up')?'':'display:none'}">— Airport Pick-up selected</span>
+        <span id="travel-section-hint" style="font-size:11px;font-weight:400;color:#94a3b8;margin-left:auto;${inc.includes('Airport Pick-up')?'display:none':''}">optional — tap to open</span>
+      </div>
+      <div class="form-grid" id="travel-section-body" style="${inc.includes('Airport Pick-up')?'':'display:none'};margin-top:12px">
         <div class="form-group"><label>Traveller Name</label><input id="f-trav-name" value="${f.travellerName||''}" placeholder="Name of person arriving (if different from student)"></div>
         <div class="form-group"><label>Traveller Contact</label><input id="f-trav-contact" value="${f.travellerContact||''}" placeholder="Mobile number"></div>
         <div class="form-group"><label>Flight Arrival Time</label><input id="f-flight-time" type="time" value="${f.flightArrivalTime||''}"></div>
@@ -2133,6 +2152,49 @@ function toggleHeightField() {
   if(field) field.style.display=(cb&&cb.checked)?'':'none';
 }
 
+// Travel section in Step 2 stays collapsed unless "Airport Pick-up" is an
+// inclusion. Called two ways:
+//  - manualToggle=true  → header was clicked; flip the current open/closed state
+//  - manualToggle=false → the Airport Pick-up checkbox changed; open when it's
+//    ticked, collapse when it isn't (any text already typed is kept, just hidden)
+function toggleTravelSection(manualToggle) {
+  const body=document.getElementById('travel-section-body');
+  const chev=document.getElementById('travel-section-chev');
+  const req=document.getElementById('travel-section-req');
+  const hint=document.getElementById('travel-section-hint');
+  if(!body) return;
+  const airportOn=!!(document.getElementById('inc-Airport-Pick-up')||{}).checked;
+  let open;
+  if(manualToggle===true){
+    open=body.style.display==='none';
+  } else {
+    open=airportOn;
+  }
+  body.style.display=open?'':'none';
+  if(chev) chev.textContent=open?'▾':'▸';
+  if(req) req.style.display=airportOn?'':'none';
+  if(hint) hint.style.display=(open||airportOn)?'none':'';
+}
+
+// "Time of Arrival on Campus" — the time picker is only relevant when a specific
+// time is known; hide (and clear) it when the user picks "To Be Confirmed".
+function toggleArrivalTimeMode() {
+  const mode=(document.getElementById('f-atime-mode')||{}).value;
+  const inp=document.getElementById('f-atime');
+  if(!inp) return;
+  if(mode==='tbc'){ inp.value=''; inp.style.display='none'; }
+  else { inp.style.display=''; }
+}
+
+// Reads the campus arrival time from the Step 2 form: 'TBC' sentinel when the
+// dropdown says so, the HH:MM value when known, else the passed-in fallback.
+function readArrivalTime(fallback) {
+  const sel=document.getElementById('f-atime-mode');
+  if(!sel) return fallback||'';
+  if(sel.value==='tbc') return 'TBC';
+  return (document.getElementById('f-atime')||{}).value||'';
+}
+
 // True when the departure date lands on the same day as arrival OR either
 // training date — i.e. any day the student could plausibly still be on
 // campus for a session before leaving. Used both for the initial render
@@ -2198,7 +2260,7 @@ async function s2Next() {
     accountsNotes:document.getElementById('f-acc-notes').value,
     inclusions:INCLUSION_KEYS.filter(k=>{ const el=document.getElementById('inc-'+k.replace(' ','-')); return el&&el.checked; }),
     heightCm:document.getElementById('f-height-cm')?document.getElementById('f-height-cm').value:'',
-    arrivalDate:arrival, arrivalTime:document.getElementById('f-atime').value,
+    arrivalDate:arrival, arrivalTime:readArrivalTime(),
     trainingStartDate:document.getElementById('f-train-start').value,
     trainingEndDate:document.getElementById('f-train-end').value,
     trainingPeriod:document.getElementById('f-period').value,
@@ -2307,13 +2369,14 @@ function buildMessages(f) {
 👨‍👩‍👦 Parent: ${f.parentName} — ${f.phone||'—'}
 📧 Email: ${f.email||'—'}
 
-📅 Arrival: ${fmtDate(f.arrivalDate)} at ${fmtTime(f.arrivalTime)||'TBD'}
+📅 Arrival: ${fmtDate(f.arrivalDate)} at ${arrTimeLabel(f.arrivalTime)}
 📅 Departure: ${fmtDate(f.departureDate)}${f.departSession?' (same-day — departing after '+f.departSession+')':''}
 🏌️ Training: ${f.trainingStartDate?fmtDate(f.trainingStartDate)+' → '+fmtDate(f.trainingEndDate):f.trainingPeriod||'—'}
 🏌️ Programme: ${f.programmeType||'Not set'}
 ✅ Inclusions: ${inc.join(', ')||'—'}
 ${inc.includes('Requires Clubs')?'\n🏌 Requires Clubs: YES — Height: '+(f.heightCm||'—')+' cm':''}
 ${hasAirport?'\n✈️ Airport Pick-up: REQUIRED — please arrange transport.':''}
+${hasAirport&&!f.flightArrivalTime?'⏳ Flight details & pick-up time: TO BE CONFIRMED — will follow once the family shares flight details.':''}
 ${f.travellerName?'\n🧳 Traveller: '+f.travellerName+(f.travellerContact?' ('+f.travellerContact+')':''):''}
 ${f.flightNo?'✈ Flight/Train: '+f.flightNo:''}
 ${f.flightArrivalTime?'🕐 Flight Arrival: '+f.flightArrivalTime+(f.terminal?' | Terminal: '+f.terminal:''):''}
@@ -2358,7 +2421,7 @@ Please raise invoice and share payment link with parent.`;
 ━━━━━━━━━━━━━━━━━━━━
 Student: ${f.studentName} (${f.age||'—'}y, ${f.gender||'—'})
 Coming From: ${f.homeCity||'—'}
-Check-in: ${fmtDate(f.arrivalDate)} at ${fmtTime(f.arrivalTime)||'TBD'}
+Check-in: ${fmtDate(f.arrivalDate)} at ${arrTimeLabel(f.arrivalTime)}
 Check-out: ${fmtDate(f.departureDate)}
 ${hasStay?'\n🛏 Accommodation: Required — please allocate and prepare room.':''}
 ${hasFood?'\n🍽️ Meals: Required for full stay duration.':''}
@@ -2568,7 +2631,7 @@ function captureFormData(fromStep){
         inclusions:INCLUSION_KEYS.filter(k=>{const el=document.getElementById('inc-'+k.replace(' ','-'));return el&&el.checked;}),
         heightCm:document.getElementById('f-height-cm')?document.getElementById('f-height-cm').value:(formData.heightCm||''),
         arrivalDate:(document.getElementById('f-arrival')||{}).value||formData.arrivalDate||'',
-        arrivalTime:(document.getElementById('f-atime')||{}).value||formData.arrivalTime||'',
+        arrivalTime:readArrivalTime(formData.arrivalTime),
         trainingStartDate:(document.getElementById('f-train-start')||{}).value||formData.trainingStartDate||'',
         trainingEndDate:(document.getElementById('f-train-end')||{}).value||formData.trainingEndDate||'',
         trainingPeriod:(document.getElementById('f-period')||{}).value||formData.trainingPeriod||'',
@@ -2644,11 +2707,17 @@ async function handOffToTeammate(fromStep){
   if(draft.phone) lines.push('*Phone:* '+draft.phone);
   if(draft.homeCity) lines.push('*City:* '+draft.homeCity);
   if(draft.programmeType) lines.push('*Programme:* '+draft.programmeType);
-  if(draft.arrivalDate) lines.push('*Arrival:* '+fmtDate(draft.arrivalDate));
+  if(draft.arrivalDate) lines.push('*Arrival:* '+fmtDate(draft.arrivalDate)+(draft.arrivalTime?' at '+arrTimeLabel(draft.arrivalTime):''));
   if(draft.departureDate) lines.push('*Departure:* '+fmtDate(draft.departureDate));
   if(draft.invoiceAmount) lines.push('*Fee:* ₹'+draft.invoiceAmount);
   if(draft.accountsNotes) lines.push('*Accounts note:* '+draft.accountsNotes);
   if(draft.specialNotes) lines.push('*Notes:* '+draft.specialNotes);
+  if((draft.inclusions||[]).includes('Airport Pick-up')){
+    lines.push('','*✈️ Airport Pick-up:* Yes');
+    if(draft.flightNo) lines.push('*Flight/Train:* '+draft.flightNo);
+    if(draft.flightArrivalTime) lines.push('*Flight arrival:* '+draft.flightArrivalTime+(draft.terminal?' ('+draft.terminal+')':''));
+    if(!draft.flightArrivalTime) lines.push('_Flight & pick-up time not known yet — I’ll confirm with the family and update the booking later._');
+  }
   lines.push('','Everything above is already filled in — open this link and the booking form opens pre-filled. Review, fill in anything missing, and submit:',link);
 
   safeOpenLink(waLink('', lines.join('\n')));
@@ -2688,7 +2757,7 @@ Dear ${b.parentName},
 
 ${b.studentName}'s *${b.programmeType||'upcoming'}* programme begins on *${trainingStart}*. Please find the complete packing list${pdfLink?' at the link below':' attached'}.
 ${pdfLink?'\n📎 Packing List: '+pdfLink:''}
-${hasAirport?'\n✈️ *Airport Pick-up:* Arranged — our team will meet you at arrivals. No need to book a cab.':''}
+${hasAirport?'\n✈️ *Airport Transfers:* Airport transfers can be arranged. Kindly share booking details early enough for us to facilitate the pick-up. Payment can be made directly to the driver.':''}
 ━━━━━━━━━━━━━━━━━━━━
 Looking forward to welcoming ${b.studentName} to TSG! ⛳`;
 }
@@ -2735,7 +2804,7 @@ function viewBooking(id) {
         <div><span class="col-label">Age · Gender · City</span><div class="col-value">${esc(b.age)||'—'} · ${esc(b.gender)||'—'} · ${esc(b.homeCity)||'—'}</div></div>
         <div><span class="col-label">Programme</span><div class="col-value">${progBadge(b.programmeType)}</div></div>
         <div><span class="col-label">Inclusions</span><div class="col-value">${inclBadges(b.inclusions)}</div></div>
-        <div><span class="col-label">Arrival</span><div class="col-value">${fmtDate(b.arrivalDate)}${b.arrivalTime?' at '+fmtTime(b.arrivalTime):''}</div></div>
+        <div><span class="col-label">Arrival</span><div class="col-value">${fmtDate(b.arrivalDate)}${b.arrivalTime?' at '+arrTimeLabel(b.arrivalTime):''}</div></div>
         <div><span class="col-label">Departure</span><div class="col-value">${fmtDate(b.departureDate)}</div></div>
         <div><span class="col-label">Training Start</span><div class="col-value">${b.trainingStartDate?fmtDate(b.trainingStartDate):'—'}</div></div>
         <div><span class="col-label">Training End</span><div class="col-value">${b.trainingEndDate?fmtDate(b.trainingEndDate):'—'}</div></div>
@@ -2780,15 +2849,17 @@ function viewBooking(id) {
 }
 
 function buildTravelMsg(f) {
+  const hasAirport = (f.inclusions || []).includes('Airport Pick-up');
   const lines = [];
   lines.push(`✈️ *Travel Brief — ${f.studentName}*`);
   lines.push('━━━━━━━━━━━━━━━━━━━━');
   if (f.travellerName) lines.push(`🧳 Traveller: ${f.travellerName}${f.travellerContact ? ' — ' + f.travellerContact : ''}`);
   if (f.flightNo) lines.push(`✈ Flight/Train: ${f.flightNo}`);
   if (f.flightArrivalTime) lines.push(`🕐 Arrival Time: ${f.flightArrivalTime}${f.terminal ? ' | Terminal: ' + f.terminal : ''}`);
+  else if (hasAirport) lines.push(`🕐 Flight & pick-up time: ⏳ TO BE CONFIRMED — will share once the family confirms travel.`);
   if (f.accompanyingStaff) lines.push(`👤 TSG Staff for Pick-up: ${f.accompanyingStaff}`);
   lines.push('━━━━━━━━━━━━━━━━━━━━');
-  lines.push(`📅 Student Arrival: ${fmtDate(f.arrivalDate)}${f.arrivalTime ? ' at ' + fmtTime(f.arrivalTime) : ''}`);
+  lines.push(`📅 Student Arrival: ${fmtDate(f.arrivalDate)}${f.arrivalTime ? ' at ' + arrTimeLabel(f.arrivalTime) : ''}`);
   return lines.join('\n');
 }
 
@@ -2904,7 +2975,7 @@ Dear ${b.parentName},
 
 This is a friendly reminder that ${b.studentName}'s ${b.programmeType} programme begins tomorrow:
 
-📅 Arrival: ${fmtDate(b.arrivalDate)} at ${fmtTime(b.arrivalTime)||'TBD'}
+📅 Arrival: ${fmtDate(b.arrivalDate)} at ${arrTimeLabel(b.arrivalTime)}
 🗓 Training: ${b.trainingPeriod||'—'}
 📅 Departure: ${fmtDate(b.departureDate)}${b.departSession?' (departing after '+b.departSession+')':''}
 
@@ -2929,7 +3000,7 @@ function sendReminderEmail(bookingId, type) {
 
 This is a friendly reminder that ${b.studentName}'s ${b.programmeType} programme begins tomorrow:
 
-Arrival: ${fmtDate(b.arrivalDate)} at ${fmtTime(b.arrivalTime)||'TBD'}
+Arrival: ${fmtDate(b.arrivalDate)} at ${arrTimeLabel(b.arrivalTime)}
 Training: ${b.trainingPeriod||'—'}
 Departure: ${fmtDate(b.departureDate)}
 
@@ -3612,6 +3683,7 @@ function buildDispatchTableHtml(bookingId) {
     + '<td style="padding:6px 8px">'
     + (dl['parent_vsf']
         ? '<span style="color:#021b3b;font-size:12px">✅ ' + dl['parent_vsf'].by + ', ' + dl['parent_vsf'].at + '</span> '
+          + '<button onclick="dispatchVSFWA(\'' + bookingId + '\')" style="font-size:10px;padding:2px 7px;border:1px solid #cbd5e0;border-radius:4px;background:#f8fafc;cursor:pointer;margin-left:4px">↩ Again</button>'
           + '<a href="https://www.tsgacademy.in/admin/index.php" target="_blank" style="font-size:10px;padding:2px 7px;border:1px solid #cbd5e0;border-radius:4px;background:#f8fafc;cursor:pointer;margin-left:4px;text-decoration:none;color:#505971">↩ Portal</a>'
         : '<button onclick="dispatchVSFWA(\'' + bookingId + '\')" style="padding:5px 12px;border-radius:6px;border:none;font-size:12px;font-weight:600;background:#7c3aed;color:#fff;margin-right:6px">💬 Send WA</button>'
           + '<button onclick="dlMarkVSF(\'' + bookingId + '\')" style="padding:5px 12px;border-radius:6px;border:1.5px solid #021b3b;cursor:pointer;font-size:12px;font-weight:600;background:#f3f9e6;color:#021b3b">✓ Mark as Sent</button>')
