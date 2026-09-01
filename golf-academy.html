@@ -1796,8 +1796,9 @@ function renderDashboard() {
   const draftsEl=document.getElementById('drafts-panel');
   if(draftsEl){
     if(drafts.length){
+      const untitledCount=drafts.filter(d=>(!d.studentName||d.studentName==='(Untitled draft)')&&!d.parentName&&!d.phone&&!d.programmeType&&!d.arrivalDate&&!d.invoiceAmount).length;
       draftsEl.innerHTML=`<div class="card" style="background:#fef3c7;border:1.5px solid #fbbf24;margin-bottom:16px">
-        <div class="card-title" style="color:#92400e">📝 Incomplete Drafts (${drafts.length})</div>
+        <div class="card-title" style="color:#92400e;display:flex;align-items:center;gap:10px">📝 Incomplete Drafts (${drafts.length})${untitledCount>1?`<button class="btn btn-sm btn-secondary" style="margin-left:auto;font-weight:600" onclick="clearUntitledDrafts()">🧹 Clear ${untitledCount} empty untitled</button>`:''}</div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
           ${drafts.map(d=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:white;border-radius:8px;border:1px solid #fde68a">
             <div style="flex:1;font-size:13px"><strong>${d.studentName||'(Untitled)'}</strong>${d.programmeType?' · '+d.programmeType:''}${d.arrivalDate?' · arrives '+fmtDateShort(d.arrivalDate):''}<br><span class="text-muted" style="font-size:11px">Saved at step ${d.lastSavedStep||1} · ${d.createdAt||''}</span></div>
@@ -2455,7 +2456,11 @@ function persistBooking() {
   const f=formData;
   const {reminderDate}=buildMessages(f);
   let booking;
-  const idx=editingBookingId?bookings.findIndex(b=>b.id===editingBookingId):-1;
+  // Fall back to an id carried on formData if editingBookingId was reset by a
+  // re-render mid-edit — otherwise the else-branch mints a fresh uid() and the
+  // same booking lands on the sheet as a second row.
+  const targetId=editingBookingId||f.id;
+  const idx=targetId?bookings.findIndex(b=>b.id===targetId):-1;
   if(idx>=0){
     const existing=bookings[idx];
     booking={
@@ -2488,6 +2493,7 @@ function persistBooking() {
     bookings.push(booking);
   }
   saveState();
+  window._lastBookingWrite={id:booking.id,at:Date.now()};
   syncToSheets(booking);
   editingBookingId=booking.id; // keep pointing at this record if the user goes back and re-saves
   return booking;
@@ -2545,6 +2551,15 @@ function formatFieldValue(field,value){
 // fields BOTH sides changed (to different values) are returned as conflicts.
 async function checkForConflicts(fromStep){
   if(!editingBookingId||!formDataBaseline||!settings.sheetUrl) return {conflicts:[]};
+  // A save we just made syncs to the sheet fire-and-forget (no-cors) and the
+  // Apps Script write can take several seconds to land. Re-reading the sheet
+  // inside that window returns the PRE-edit values for THIS booking, and the
+  // diff below then "helpfully" reverts the user's change
+  // (theirsChanged && !oursChanged) or raises a phantom conflict — e.g. edit a
+  // fee, step to Preview & Dispatch, hit Back, save again → fee snaps back.
+  // Skip the round-trip while our own write to this same booking is in flight.
+  const lw=window._lastBookingWrite;
+  if(lw && lw.id===editingBookingId && (Date.now()-lw.at) < 15000) return {conflicts:[]};
   await loadFromSheet();
   const serverB=bookings.find(b=>b.id===editingBookingId);
   if(!serverB) return {conflicts:[]}; // deleted elsewhere — nothing to diff against
@@ -2688,17 +2703,28 @@ function persistDraft(fromStep){
     f.studentName='(Untitled draft)';
   }
   let draftToSync;
-  if(editingBookingId){
-    const idx=bookings.findIndex(b=>b.id===editingBookingId);
-    if(idx>=0){bookings[idx]={...bookings[idx],...formData,isDraft:true,lastSavedStep:fromStep};draftToSync=bookings[idx];}
+  // Prefer the live edit target, but fall back to an id carried on formData
+  // itself: if we're clearly mid-edit (formData has an id) and editingBookingId
+  // was reset by a re-render between opening the form and hitting save, reattach
+  // to that record instead of pushing a brand-new "(Untitled draft)" row every
+  // time — that reset-then-save loop is what spawned waves of duplicates.
+  const targetId=editingBookingId||f.id;
+  const idx=targetId?bookings.findIndex(b=>b.id===targetId):-1;
+  if(idx>=0){
+    bookings[idx]={...bookings[idx],...formData,id:bookings[idx].id,isDraft:true,lastSavedStep:fromStep};
+    draftToSync=bookings[idx];
+    editingBookingId=bookings[idx].id;
   } else {
-    const draft={id:uid(),...formData,isDraft:true,dispatched:false,createdAt:today(),reminders:[],lastSavedStep:fromStep};
+    const draft={id:targetId||uid(),...formData,isDraft:true,dispatched:false,createdAt:formData.createdAt||today(),reminders:formData.reminders||[],lastSavedStep:fromStep};
     bookings.push(draft);
     editingBookingId=draft.id;
     draftToSync=draft;
   }
   saveState();
-  if(draftToSync) syncToSheets(draftToSync); // sync draft so all team members can see it
+  if(draftToSync){
+    window._lastBookingWrite={id:draftToSync.id,at:Date.now()};
+    syncToSheets(draftToSync); // sync draft so all team members can see it
+  }
   return draftToSync;
 }
 
@@ -2760,6 +2786,26 @@ function deleteDraft(id){
   if(settings.sheetUrl){
     fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'deleteBooking',id}),headers:{'Content-Type':'text/plain'}});
   }
+  renderDashboard();
+}
+
+// Bulk-remove the hollow "(Untitled draft)" rows a reset-then-save loop can leave
+// behind — nothing filled in beyond the placeholder name.
+function clearUntitledDrafts(){
+  const junk=bookings.filter(b=>b.isDraft
+    && (!b.studentName || b.studentName==='(Untitled draft)')
+    && !b.parentName && !b.phone && !b.programmeType && !b.arrivalDate && !b.invoiceAmount);
+  if(!junk.length){alert('No empty untitled drafts to clear.');return;}
+  if(!confirm('Delete '+junk.length+' empty untitled draft'+(junk.length>1?'s':'')+'? Named and partly-filled drafts are kept.'))return;
+  const ids=new Set(junk.map(b=>b.id));
+  bookings=bookings.filter(b=>!ids.has(b.id));
+  saveState();
+  junk.forEach(b=>{
+    _markDeletedId(b.id);
+    if(settings.sheetUrl){
+      fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'deleteBooking',id:b.id}),headers:{'Content-Type':'text/plain'}});
+    }
+  });
   renderDashboard();
 }
 
