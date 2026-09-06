@@ -1073,20 +1073,165 @@ const ALUMNI_HISTORICAL = [
 ["Shatrughan Sinha", "", "9820345678", "shatrughansinha@gmail.com", "Mumbai", "Senior Program", "Sep 2025", "adult"]
 ].map(function(r){return {studentName:r[0],parentName:r[1],phone:r[2],email:r[3],homeCity:r[4],programmeType:r[5],monthOfVisit:r[6],type:r[7],_historical:true};});
 
+// ─── PERSISTENT ALUMNI STORE ────────────────────────────────────────────────
+// The Alumni tab used to be a pure live filter over `bookings` — a departed
+// visitor only showed for as long as their booking row still existed, so any
+// pipeline cleanup (or a stale syncAll) erased them for good. Now, once a
+// booking's departure date has passed, the visitor is *copied* into
+// golf_alumni_v1 (and the sheet's Alumni tab) and kept there permanently.
+// getAlumniRecords() reads this store first and only falls back to live
+// bookings for visitors not yet promoted.
+const ALUMNI_STORE_KEY = 'golf_alumni_v1';
+let _alumniStore = [];
+
+function loadAlumniStore() {
+  try { _alumniStore = JSON.parse(localStorage.getItem(ALUMNI_STORE_KEY) || '[]'); }
+  catch(e) { _alumniStore = []; }
+  if (!Array.isArray(_alumniStore)) _alumniStore = [];
+}
+
+function _saveAlumniLocal() {
+  localStorage.setItem(ALUMNI_STORE_KEY, JSON.stringify(_alumniStore));
+}
+
+// Local-time YYYY-MM-DD. Using toISOString() here (as the old code did) is UTC,
+// so for ~5.5h after IST midnight "today" lagged a day and same-day departures
+// weren't promoted.
+function _todayLocal() {
+  var d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+// The date a visitor left campus. Departure date is authoritative ("once their
+// departure date crosses"); training-end is only a fallback for older records
+// where no departure date was entered.
+function _alumniEndDate(b) {
+  return String(b.departureDate || b.trainingEndDate || '').trim();
+}
+
+function _bookingToAlumni(b) {
+  var mon = '';
+  var basis = b.arrivalDate || b.departureDate || '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(basis)) {
+    var d = new Date(basis + 'T00:00:00');
+    if (!isNaN(d.getTime())) mon = d.toLocaleDateString('en-IN',{month:'short',year:'numeric'});
+  }
+  return {
+    id: b.id || ((b.studentName||'') + '|' + (b.phone||'')),
+    studentName: b.studentName||'', parentName: b.parentName||'',
+    phone: b.phone||'', email: b.email||'', homeCity: b.homeCity||'',
+    programmeType: b.programmeType||'', monthOfVisit: mon, type: 'app',
+    departureDate: _alumniEndDate(b), promotedAt: nowStamp()
+  };
+}
+
+// Copy every departed, non-draft booking into the store. While a booking still
+// exists its contact fields are kept in sync; once it's deleted the last
+// snapshot is frozen. Returns true if anything changed.
+function promoteDepartedToAlumni() {
+  if (!Array.isArray(bookings) || !bookings.length) return false;
+  var today = _todayLocal();
+  var byId = {};
+  _alumniStore.forEach(function(a){ byId[a.id] = a; });
+  var changed = false;
+  bookings.forEach(function(b){
+    if (b.isDraft) return;
+    var end = _alumniEndDate(b);
+    if (!end || end > today) return;
+    var fresh = _bookingToAlumni(b);
+    var existing = byId[fresh.id];
+    if (!existing) {
+      _alumniStore.push(fresh);
+      byId[fresh.id] = fresh;
+      changed = true;
+    } else {
+      // keep the original promotedAt; refresh the mutable fields
+      ['studentName','parentName','phone','email','homeCity','programmeType','monthOfVisit','departureDate']
+        .forEach(function(k){ if (existing[k] !== fresh[k]) { existing[k] = fresh[k]; changed = true; } });
+    }
+  });
+  if (changed) { _saveAlumniLocal(); syncAlumniToSheet(); }
+  return changed;
+}
+
+// Force one booking into the store right now — called just before a delete so a
+// departed visitor is never lost to pipeline cleanup on this device.
+function promoteOneToAlumni(b) {
+  if (!b || b.isDraft) return;
+  var end = _alumniEndDate(b);
+  if (!end || end > _todayLocal()) return;
+  var fresh = _bookingToAlumni(b);
+  if (_alumniStore.some(function(a){ return a.id === fresh.id; })) return;
+  _alumniStore.push(fresh);
+  _saveAlumniLocal();
+  syncAlumniToSheet();
+}
+
+async function loadAlumniFromSheet() {
+  if (!settings.sheetUrl) return;
+  try {
+    var url = settings.sheetUrl + '?action=getAlumni&t=' + Date.now();
+    var resp = await fetch(url, {method:'GET', mode:'cors'});
+    if (!resp.ok) { console.warn('Alumni load failed:', resp.status); return; }
+    var data = await resp.json();
+    if (!data.alumni || !Array.isArray(data.alumni)) return;
+    // Union by id — the sheet copy and this device's copy are merged so a
+    // full-overwrite push from either side can't drop the other's entries.
+    var byId = {};
+    _alumniStore.forEach(function(a){ byId[a.id] = a; });
+    data.alumni.forEach(function(a){
+      if (a && a.id && !byId[a.id]) { byId[a.id] = a; _alumniStore.push(a); }
+    });
+    _saveAlumniLocal();
+    var active = document.querySelector('.section.active');
+    if (active && active.id === 'section-alumni') renderAlumni();
+  } catch(e) {
+    console.warn('Alumni load failed, using local cache:', e.message);
+  }
+}
+
+function syncAlumniToSheet() {
+  if (!settings.sheetUrl) return;
+  var body = JSON.stringify({action:'saveAlumni', alumni: _alumniStore});
+  if (navigator.sendBeacon) {
+    try { navigator.sendBeacon(settings.sheetUrl, new Blob([body],{type:'text/plain'})); }
+    catch(e) { /* fetch below still runs */ }
+  }
+  fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body,headers:{'Content-Type':'text/plain'}})
+    .catch(function(e){ console.warn('Alumni sync failed:', e.message); });
+}
+
 function getAlumniRecords() {
-  var today = new Date().toISOString().split('T')[0];
-  var appRecords = bookings.filter(function(b){
+  var today = _todayLocal();
+
+  // 1) Everyone already captured in the persistent store.
+  var promoted = _alumniStore.map(function(a){
+    return {studentName:a.studentName||'',parentName:a.parentName||'',phone:a.phone||'',
+            email:a.email||'',homeCity:a.homeCity||'',programmeType:a.programmeType||'',
+            monthOfVisit:a.monthOfVisit||'',type:a.type||'app',_historical:false,_id:a.id};
+  });
+  var promotedIds = {};
+  promoted.forEach(function(r){ if (r._id) promotedIds[r._id] = true; });
+
+  // 2) Departed bookings not yet promoted — keeps the view correct in the gap
+  //    before promoteDepartedToAlumni() runs on the next load/sync.
+  var live = bookings.filter(function(b){
     if (b.isDraft) return false;
-    var endDate = b.trainingEndDate || b.departureDate || '';
-    return endDate && endDate <= today;
+    if (b.id && promotedIds[b.id]) return false;
+    var end = String(b.departureDate || b.trainingEndDate || '').trim();
+    return end && end <= today;
   }).map(function(b){
     var mon = '';
-    if(b.arrivalDate){var d=new Date(b.arrivalDate+'T00:00:00');mon=d.toLocaleDateString('en-IN',{month:'short',year:'numeric'});}
+    if(b.arrivalDate){var d=new Date(b.arrivalDate+'T00:00:00');if(!isNaN(d.getTime()))mon=d.toLocaleDateString('en-IN',{month:'short',year:'numeric'});}
     return {studentName:b.studentName||'',parentName:b.parentName||'',phone:b.phone||'',email:b.email||'',homeCity:b.homeCity||'',programmeType:b.programmeType||'',monthOfVisit:mon,type:'app',_historical:false};
   });
+
+  var appAll = promoted.concat(live);
   var histKeys = {};
   ALUMNI_HISTORICAL.forEach(function(r){histKeys[(r.studentName+'|'+r.phone).toLowerCase()]=true;});
-  var newFromApp = appRecords.filter(function(r){return !histKeys[(r.studentName+'|'+r.phone).toLowerCase()];});
+  var newFromApp = appAll.filter(function(r){return !histKeys[(r.studentName+'|'+r.phone).toLowerCase()];});
   var appSorted = newFromApp.sort(function(a,b){return (b.monthOfVisit||'').localeCompare(a.monthOfVisit||'');});
   var histSorted = ALUMNI_HISTORICAL.slice().sort(function(a,b){return a.studentName.localeCompare(b.studentName);});
   return appSorted.concat(histSorted);
@@ -1242,17 +1387,20 @@ function loadState() {
     const savedSettings = localStorage.getItem('golf_settings_v2');
     if (savedSettings) { settings = Object.assign({}, settings, JSON.parse(savedSettings)); applySettingsToUI(); initEmailJS(); }
     else { applySettingsToUI(); initEmailJS(); }
+    loadAlumniStore();
     // If sheet URL configured, always load from sheet (skip localStorage for bookings)
     if (settings.sheetUrl) {
       bookings = [];
       renderDashboard();
       loadFromSheet();
       loadProgrammeTypesFromSheet();
+      loadAlumniFromSheet();
     } else {
       // No sheet — fall back to localStorage
       const saved = localStorage.getItem('golf_bookings_v5');
       bookings = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(SAMPLE_DATA));
       if (!saved) saveState();
+      promoteDepartedToAlumni();
       renderDashboard();
       checkLeadHandoffLink();
     }
@@ -1286,13 +1434,14 @@ async function loadFromSheet() {
     _dlMergeIntoBookings(); // restore any locally-logged dispatch entries
     // Save clean sheet data to localStorage
     localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
+    promoteDepartedToAlumni(); // capture anyone whose departure date has passed
     renderDashboard();
     checkLeadHandoffLink();
   } catch(e) {
     // Sheet failed — fall back to localStorage
     console.warn('Sheet load failed, using local cache:', e.message);
     const saved = localStorage.getItem('golf_bookings_v5');
-    if (saved) { bookings = JSON.parse(saved); _dlMergeIntoBookings(); renderDashboard(); }
+    if (saved) { bookings = JSON.parse(saved); _dlMergeIntoBookings(); promoteDepartedToAlumni(); renderDashboard(); }
     checkLeadHandoffLink();
   }
 }
@@ -2987,6 +3136,8 @@ function openWAWithMsg(encodedMsg, team, phone) {
 
 function deleteBooking(id){
   if(!confirm('Delete this booking? This cannot be undone.'))return;
+  const _bDel=bookings.find(b=>b.id===id);
+  if(_bDel) promoteOneToAlumni(_bDel); // a departed visitor stays in Alumni even after the booking is gone
   bookings=bookings.filter(b=>b.id!==id);
   saveState();
   closeModal();
@@ -3219,6 +3370,10 @@ function resetToSample(){if(!confirm('Reset all bookings to April 2026 sample da
 function copyAppsScript(){
   const s = `// TSG Golf Academy — Bookings Google Apps Script
 // Deploy as Web App: Execute as Me, Anyone can access
+// v9 — SpreadsheetApp.flush() inside the lock so a queued request can't read a
+//      stale sheet and re-append; addBooking now collapses any duplicate rows
+// v8 — LockService around doPost so concurrent sendBeacon+fetch writes can't
+//      double-append the same booking; deleteBooking now clears every matching row
 // v7 — adds GST flag column, dispatchLog column, fixes date/time auto-conversion
 
 // Column layout (1-indexed):
@@ -3317,24 +3472,35 @@ function bookingToRow(b) {
 }
 
 function doPost(e) {
+  // Serialise every write. The web app fires two near-simultaneous requests per
+  // save (navigator.sendBeacon + fetch); without this lock both can read the id
+  // column before either appends, both treat a new id as missing, and both
+  // appendRow — producing two identical rows with the same id.
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (lockErr) {
+    return ContentService.createTextOutput(JSON.stringify({error:'busy, retry'})).setMimeType(ContentService.MimeType.JSON);
+  }
   try {
     const data = JSON.parse(e.postData.contents);
     const sheet = getSheet();
     if (data.action === 'addBooking') {
       const b = data.booking;
       const ids = sheet.getRange(2,1,Math.max(sheet.getLastRow()-1,1),1).getValues().flat();
-      const existingRow = ids.indexOf(b.id);
-      if (existingRow >= 0) {
-        sheet.getRange(existingRow+2, 1, 1, HEADERS.length).setValues([bookingToRow(b)]);
-      } else {
+      const matches = [];
+      for (let i = 0; i < ids.length; i++) if (ids[i] === b.id) matches.push(i);
+      if (matches.length === 0) {
         sheet.appendRow(bookingToRow(b));
+      } else {
+        sheet.getRange(matches[0]+2, 1, 1, HEADERS.length).setValues([bookingToRow(b)]);
+        for (let k = matches.length - 1; k >= 1; k--) sheet.deleteRow(matches[k]+2);
       }
     }
     if (data.action === 'deleteBooking') {
       const id = data.id;
       const ids = sheet.getRange(2,1,Math.max(sheet.getLastRow()-1,1),1).getValues().flat();
-      const rowIdx = ids.indexOf(id);
-      if (rowIdx >= 0) sheet.deleteRow(rowIdx + 2);
+      for (let i = ids.length - 1; i >= 0; i--) {
+        if (ids[i] === id) sheet.deleteRow(i + 2);
+      }
     }
     if (data.action === 'syncAll') {
       const bookings = data.bookings || [];
@@ -3344,9 +3510,13 @@ function doPost(e) {
         sheet.getRange(2,1,rows.length,HEADERS.length).setValues(rows);
       }
     }
+    SpreadsheetApp.flush();
     return ContentService.createTextOutput(JSON.stringify({success:true})).setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({error:err.toString()})).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    try { SpreadsheetApp.flush(); } catch (flushErr) {}
+    lock.releaseLock();
   }
 }
 
@@ -3925,6 +4095,7 @@ async function doLogin() {
       // overwriting dispatch log changes before the sheet POST has been processed
       if (window._lastWriteTime && (Date.now() - window._lastWriteTime) < 30000) return;
       await loadFromSheet();
+      await loadAlumniFromSheet(); // pull in visitors other devices have promoted
       // loadFromSheet() already calls renderDashboard(), which also refreshes the monthly calendar
       const active = document.querySelector('.section.active');
       if (active && active.id === 'section-alumni') renderAlumni();
