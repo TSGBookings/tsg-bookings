@@ -422,7 +422,7 @@ textarea { resize: vertical; min-height: 80px; }
           <span id="grid-filter-to-sep" class="text-sm text-muted no-print" style="display:none">to</span>
           <input type="date" id="grid-filter-to" class="no-print" style="display:none;padding:5px 8px;font-size:13px" title="To date" onchange="renderDashboard()">
           <select id="programme-filter" style="padding:6px 12px;font-size:13px" onchange="renderDashboard()"></select>
-          <input id="search-input" type="text" placeholder="Search student..." style="padding:6px 12px;font-size:13px;width:160px" oninput="renderDashboard()">
+          <input id="search-input" type="text" name="tsg_search_nofill" autocomplete="new-password" placeholder="Search student..." style="padding:6px 12px;font-size:13px;width:160px" oninput="renderDashboard()">
           <div class="ml-auto flex gap-8">
             <button class="btn btn-pdf btn-sm" onclick="downloadPDF()">⬇ Download PDF</button>
             <button class="btn btn-primary btn-sm" onclick="newBooking()">+ New Booking</button>
@@ -621,7 +621,7 @@ textarea { resize: vertical; min-height: 80px; }
         <p>All visiting students — historical records plus current app bookings</p>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-        <input id="alumni-search" type="text" placeholder="Search by name, city or programme…"
+        <input id="alumni-search" type="text" name="tsg_alumni_search_nofill" autocomplete="new-password" placeholder="Search by name, city or programme…"
           style="padding:7px 12px;font-size:13px;border:1.5px solid #cbd5e0;border-radius:8px;width:220px;max-width:100%"
           oninput="renderAlumni()">
         <div id="alumni-type-filter" style="display:flex;gap:6px">
@@ -1247,7 +1247,10 @@ function setAlumniFilter(f) {
 }
 
 function renderAlumni() {
-  var query = ((document.getElementById('alumni-search')||{}).value||'').toLowerCase().trim();
+  var alumniSearchEl = document.getElementById('alumni-search');
+  var rawAlumniQuery = (alumniSearchEl && alumniSearchEl.value) || '';
+  if (/^https?:\/\//i.test(rawAlumniQuery.trim())) { if (alumniSearchEl) alumniSearchEl.value = ''; rawAlumniQuery = ''; }
+  var query = rawAlumniQuery.toLowerCase().trim();
   var all = getAlumniRecords();
   var filtered = all;
   if(_alumniFilter && _alumniFilter !== 'all') filtered = filtered.filter(function(r){return r.type===_alumniFilter;});
@@ -1408,43 +1411,75 @@ function loadState() {
   } catch(e) { bookings = JSON.parse(JSON.stringify(SAMPLE_DATA)); renderDashboard(); }
 }
 
+let _sheetLoadInFlight = false;
 async function loadFromSheet() {
+  // Guard against overlapping calls — e.g. the 60s auto-refresh firing again
+  // while a previous call is still mid-retry (each attempt can take up to ~12s).
+  if (_sheetLoadInFlight) return;
+  _sheetLoadInFlight = true;
+  try {
+    await _loadFromSheetAttempt(1);
+  } finally {
+    _sheetLoadInFlight = false;
+  }
+}
+
+async function _loadFromSheetAttempt(attempt) {
   if(!settings.sheetUrl) return;
+  const MAX_ATTEMPTS = 3;
+  const ATTEMPT_TIMEOUT_MS = 12000;
+  let data;
   try {
     const url = settings.sheetUrl + '?action=getAll&t=' + Date.now();
-    const resp = await fetch(url, {method:'GET', mode:'cors'});
-    if (!resp.ok) { console.warn('Sheet load failed:', resp.status); return; }
-    const data = await resp.json();
-    if (!data.bookings || !Array.isArray(data.bookings)) return;
-    // Preserve local dispatch log entries that haven't reached the sheet yet.
-    // The sheet POST (no-cors) can take a few seconds to process; a refresh in that
-    // window would otherwise wipe locally-made changes. We take the union of both logs.
-    const localSnapshot = bookings;
-    const deletedIds = _loadDeletedIds();
-    const mergedSheetBookings = data.bookings
-      .filter(sheetB => !deletedIds[sheetB.id]) // hide anything deleted locally even if the sheet-side delete hasn't landed yet
-      .map(sheetB => {
-        const localB = localSnapshot.find(lb => lb.id === sheetB.id);
-        if (!localB || !localB.dispatchLog || !Object.keys(localB.dispatchLog).length) return sheetB;
-        const mergedLog = Object.assign({}, sheetB.dispatchLog || {}, localB.dispatchLog);
-        return Object.assign({}, sheetB, { dispatchLog: mergedLog });
-      });
-    // Keep any local drafts not yet synced to sheet (but not ones we've deliberately deleted)
-    const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id) && !deletedIds[b.id]);
-    bookings = [...mergedSheetBookings, ...localDrafts];
-    _dlMergeIntoBookings(); // restore any locally-logged dispatch entries
-    // Save clean sheet data to localStorage
-    localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
-    promoteDepartedToAlumni(); // capture anyone whose departure date has passed
-    renderDashboard();
-    checkLeadHandoffLink();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
+    let resp;
+    try {
+      resp = await fetch(url, {method:'GET', mode:'cors', signal: controller.signal});
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    data = await resp.json();
+    if (!data.bookings || !Array.isArray(data.bookings)) throw new Error('Unexpected response shape');
   } catch(e) {
-    // Sheet failed — fall back to localStorage
-    console.warn('Sheet load failed, using local cache:', e.message);
+    const reason = e.name === 'AbortError' ? 'timed out after ' + (ATTEMPT_TIMEOUT_MS/1000) + 's' : e.message;
+    console.warn('Sheet load failed (attempt ' + attempt + '/' + MAX_ATTEMPTS + '): ' + reason);
+    if (attempt < MAX_ATTEMPTS) {
+      _showSyncToast('⏳ Connection hiccup — retrying (' + (attempt+1) + '/' + MAX_ATTEMPTS + ')…', true);
+      await new Promise(r => setTimeout(r, 1500));
+      return _loadFromSheetAttempt(attempt + 1);
+    }
+    // All retries exhausted — fall back to localStorage so the app isn't left blank
+    _showSyncToast('⚠️ Could not reach the Google Sheet — showing last saved data', true);
     const saved = localStorage.getItem('golf_bookings_v5');
     if (saved) { bookings = JSON.parse(saved); _dlMergeIntoBookings(); promoteDepartedToAlumni(); renderDashboard(); }
     checkLeadHandoffLink();
+    return;
   }
+  // Preserve local dispatch log entries that haven't reached the sheet yet.
+  // The sheet POST (no-cors) can take a few seconds to process; a refresh in that
+  // window would otherwise wipe locally-made changes. We take the union of both logs.
+  const localSnapshot = bookings;
+  const deletedIds = _loadDeletedIds();
+  const mergedSheetBookings = data.bookings
+    .filter(sheetB => !deletedIds[sheetB.id]) // hide anything deleted locally even if the sheet-side delete hasn't landed yet
+    .map(sheetB => {
+      const localB = localSnapshot.find(lb => lb.id === sheetB.id);
+      if (!localB || !localB.dispatchLog || !Object.keys(localB.dispatchLog).length) return sheetB;
+      const mergedLog = Object.assign({}, sheetB.dispatchLog || {}, localB.dispatchLog);
+      return Object.assign({}, sheetB, { dispatchLog: mergedLog });
+    });
+  // Keep any local drafts not yet synced to sheet (but not ones we've deliberately deleted)
+  const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id) && !deletedIds[b.id]);
+  bookings = [...mergedSheetBookings, ...localDrafts];
+  _dlMergeIntoBookings(); // restore any locally-logged dispatch entries
+  // Save clean sheet data to localStorage
+  localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
+  promoteDepartedToAlumni(); // capture anyone whose departure date has passed
+  renderDashboard();
+  checkLeadHandoffLink();
+  if (attempt > 1) _showSyncToast('✓ Connected', false);
 }
 
 function initEmailJS() {
@@ -1870,10 +1905,24 @@ function renderRevenue() {
 
 // Reads the filter bar (mode + month/range + programme + search) and returns
 // matching live bookings, sorted newest-arrival-first.
+// Chrome sometimes autofills #search-input with an unrelated remembered value (e.g. a
+// Google Drive link from the PDF-link Settings fields), even with autocomplete="off" and
+// an init-time clear — it can reapply the autofill later, after the page has settled.
+// This guards the actual filtering so a stray URL can never hide every real booking.
+function getSearchQuery() {
+  const el = document.getElementById('search-input');
+  const val = (el && el.value) || '';
+  if (/^https?:\/\//i.test(val.trim())) {
+    if (el) el.value = '';
+    return '';
+  }
+  return val;
+}
+
 function getGridFilteredBookings(liveBookings) {
   if(!liveBookings) liveBookings=bookings.filter(b=>!b.isDraft);
   const mode=(document.getElementById('grid-filter-mode')||{}).value||'all';
-  const query=(document.getElementById('search-input')||{}).value||'';
+  const query=getSearchQuery();
   const progFilter=(document.getElementById('programme-filter')||{}).value||'';
   let filtered=liveBookings;
   if(mode==='month'){
@@ -1970,7 +2019,7 @@ function renderDashboard() {
     <div class="stat-card" style="cursor:pointer" onclick="showStatDrilldown('reminders')"><div class="stat-value stat-purple">${pendingReminders}</div><div class="stat-label">Pending Reminders</div></div>
   `;
 
-  const query=(document.getElementById('search-input')||{}).value||'';
+  const query=getSearchQuery();
   const progFilter=(document.getElementById('programme-filter')||{}).value||'';
   const isFiltered=!!(query||progFilter);
   const sorted=getGridFilteredBookings(liveBookings);
@@ -4080,12 +4129,15 @@ async function doLogin() {
   if (revNav) revNav.style.display = (user === 'Rokhsar') ? 'flex' : 'none';
   // The search field sits behind the login overlay while hidden — Chrome appears to
   // apply its remembered value only once the field becomes visible/interactive here,
-  // which is after init()'s own clear already ran. Clear it again now, and once more
-  // shortly after in case Chrome's autofill applies asynchronously post-render.
-  const clearSearchInput = () => { const si = document.getElementById('search-input'); if (si) si.value = ''; };
+  // which is after init()'s own clear already ran. Chrome's autofill timing is
+  // inconsistent (observed anywhere from <1s to ~10s after this point), so keep
+  // re-clearing across a wider window. getSearchQuery() (used wherever this field is
+  // read) is the real backstop — it ignores URL-shaped values outright — this loop
+  // just keeps the visible box tidy too.
+  const clearSearchInput = () => { const si = document.getElementById('search-input'); if (si && /^https?:\/\//i.test(si.value.trim())) { si.value = ''; renderDashboard(); } };
   clearSearchInput();
   renderDashboard();
-  setTimeout(() => { clearSearchInput(); renderDashboard(); }, 300);
+  [300, 800, 1500, 3000, 6000, 10000, 15000].forEach(ms => setTimeout(clearSearchInput, ms));
   // Auto-refresh from sheet every 60s so both users see each other's dispatch updates
   if (settings.sheetUrl && !window._syncInterval) {
     window._syncInterval = setInterval(async () => {
