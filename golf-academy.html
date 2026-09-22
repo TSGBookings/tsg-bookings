@@ -295,6 +295,7 @@ textarea { resize: vertical; min-height: 80px; }
   .section { display: none !important; }
   #section-monthly { display: block !important; }
   #pdf-btn-row { display: none !important; }
+  #drafts-panel { display: none !important; }
 
   /* ── Print header ── */
   #section-monthly::before {
@@ -3015,6 +3016,28 @@ function viewBooking(id) {
     ? `<div style="background:#fff3cd;border:1.5px solid #fbbf24;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#856404;font-weight:600">⚠️ Airport Pick-up selected — travel details are incomplete. Please fill them in below.</div>`
     : '';
 
+  const travelSection = !hasAirport ? '' : `
+    <!-- SECTION 2: TRAVEL DETAILS -->
+    <div style="background:#eff6ff;border:1.5px solid ${travelMissing?'#fbbf24':'#bfdbfe'};border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <strong>✈️ Travel Details <span style="color:#e53e3e;font-size:11px">— Required</span></strong>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-secondary" onclick="saveTravelDetails('${b.id}')">💾 Save</button>
+          <button class="btn btn-sm btn-wa" onclick="sendTravelWA('${b.id}')">💬 Send to Transport</button>
+        </div>
+      </div>
+      ${travelWarning}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
+        <div><span class="col-label">Traveller Name</span><input id="vtd-trav-name-${b.id}" value="${b.travellerName||''}" placeholder="Name of person arriving" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">Traveller Contact</span><input id="vtd-trav-contact-${b.id}" value="${b.travellerContact||''}" placeholder="Mobile number" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">Flight / Train No.</span><input id="vtd-flight-no-${b.id}" value="${b.flightNo||''}" placeholder="e.g. AI 504" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">Flight Arrival Time</span><input id="vtd-flight-time-${b.id}" type="time" value="${b.flightArrivalTime||''}" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">Terminal</span><input id="vtd-terminal-${b.id}" value="${b.terminal||''}" placeholder="e.g. T2, Domestic" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div><span class="col-label">TSG Staff for Pick-up</span><input id="vtd-staff-${b.id}" value="${b.accompanyingStaff||''}" placeholder="Staff name" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
+        <div style="grid-column:1/-1"><span class="col-label">Special Instructions</span><textarea id="vtd-special-${b.id}" placeholder="Any special instructions for transport / pick-up..." style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;resize:vertical;min-height:48px">${b.travelSpecialInstructions||''}</textarea></div>
+      </div>
+    </div>`;
+
   document.getElementById('modal-body').innerHTML=`
     <!-- SECTION 1: BOOKING SUMMARY -->
     <div style="background:#f8fafc;border-radius:10px;padding:14px 16px;margin-bottom:16px">
@@ -3035,26 +3058,7 @@ function viewBooking(id) {
       </div>
     </div>
 
-    <!-- SECTION 2: TRAVEL DETAILS -->
-    <div style="background:#eff6ff;border:1.5px solid ${hasAirport&&travelMissing?'#fbbf24':'#bfdbfe'};border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <strong>✈️ Travel Details ${hasAirport?'<span style="color:#e53e3e;font-size:11px">— Required</span>':hasAirport?'':'<span style="font-size:11px;color:#505971;font-weight:400">(airport pick-up not selected)</span>'}</strong>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm btn-secondary" onclick="saveTravelDetails('${b.id}')">💾 Save</button>
-          ${hasAirport?`<button class="btn btn-sm btn-wa" onclick="sendTravelWA('${b.id}')">💬 Send to Transport</button>`:''}
-        </div>
-      </div>
-      ${travelWarning}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
-        <div><span class="col-label">Traveller Name</span><input id="vtd-trav-name-${b.id}" value="${b.travellerName||''}" placeholder="Name of person arriving" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
-        <div><span class="col-label">Traveller Contact</span><input id="vtd-trav-contact-${b.id}" value="${b.travellerContact||''}" placeholder="Mobile number" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
-        <div><span class="col-label">Flight / Train No.</span><input id="vtd-flight-no-${b.id}" value="${b.flightNo||''}" placeholder="e.g. AI 504" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
-        <div><span class="col-label">Flight Arrival Time</span><input id="vtd-flight-time-${b.id}" type="time" value="${b.flightArrivalTime||''}" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
-        <div><span class="col-label">Terminal</span><input id="vtd-terminal-${b.id}" value="${b.terminal||''}" placeholder="e.g. T2, Domestic" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
-        <div><span class="col-label">TSG Staff for Pick-up</span><input id="vtd-staff-${b.id}" value="${b.accompanyingStaff||''}" placeholder="Staff name" style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px"></div>
-        <div style="grid-column:1/-1"><span class="col-label">Special Instructions</span><textarea id="vtd-special-${b.id}" placeholder="Any special instructions for transport / pick-up..." style="width:100%;margin-top:3px;padding:5px 8px;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;resize:vertical;min-height:48px">${b.travelSpecialInstructions||''}</textarea></div>
-      </div>
-    </div>
+    ${travelSection}
 
     <!-- SECTION 3: DISPATCH STATUS -->
     <div style="margin-bottom:16px">
