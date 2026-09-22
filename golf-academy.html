@@ -16,6 +16,8 @@
 
 <title>TSG Bookings</title>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; color: #021b3b; }
@@ -534,22 +536,12 @@ textarea { resize: vertical; min-height: 80px; }
         </div>
 
         <div class="settings-section">
-          <h3>📊 Google Sheets Sync</h3>
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Google Sheet ID</label>
-              <input id="s-sheet-id" type="text" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms">
-            </div>
-            <div class="form-group">
-              <label>Apps Script Web App URL</label>
-              <input id="s-sheet-url" type="text" placeholder="https://script.google.com/macros/s/...">
-            </div>
-          </div>
+          <h3>☁️ Database Connection</h3>
+          <div class="settings-tip">Bookings, alumni, and programme types are stored in Firebase (Google's cloud database) — there's nothing to configure here.</div>
           <div class="mt-16 flex items-center gap-12">
             <button class="btn btn-secondary btn-sm" onclick="testSheetsSync()">🔄 Test Connection</button>
             <span id="sync-status" class="text-sm text-muted"></span>
           </div>
-          <button class="btn btn-secondary btn-sm mt-16" onclick="copyAppsScript()">📋 Copy Google Apps Script</button>
         </div>
 
         <div class="settings-section">
@@ -572,7 +564,7 @@ textarea { resize: vertical; min-height: 80px; }
           <div class="flex gap-12" style="flex-wrap:wrap">
             <button class="btn btn-secondary btn-sm" onclick="exportData()">⬇ Export JSON Backup</button>
             <button class="btn btn-secondary btn-sm" onclick="importData()">⬆ Import JSON</button>
-            <button class="btn btn-primary btn-sm" onclick="syncAllToSheets()">☁ Sync All to Google Sheet</button>
+            <button class="btn btn-primary btn-sm" onclick="syncAllToSheets()">☁ Sync All to Database</button>
             <button class="btn btn-danger btn-sm" onclick="resetToSample()">↺ Reset to Sample Data</button>
             <button class="btn btn-secondary btn-sm" onclick="markOnCampusAsDone()">✅ Mark On-Campus Dispatch Done (≤ 15 Jun)</button>
           </div>
@@ -720,6 +712,18 @@ textarea { resize: vertical; min-height: 80px; }
 </div>
 
 <script>
+// ===================== FIREBASE =====================
+const firebaseConfig = {
+  apiKey: "AIzaSyA4J4izuGz644uogLRl_LLfaBMTv3_uO_k",
+  authDomain: "tsg-bookings.firebaseapp.com",
+  projectId: "tsg-bookings",
+  storageBucket: "tsg-bookings.firebasestorage.app",
+  messagingSenderId: "116796359221",
+  appId: "1:116796359221:web:b33e6825fab83530f9277c"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
 // ===================== SAMPLE DATA =====================
 const SAMPLE_DATA = [];
 
@@ -1171,18 +1175,14 @@ function promoteOneToAlumni(b) {
 }
 
 async function loadAlumniFromSheet() {
-  if (!settings.sheetUrl) return;
   try {
-    var url = settings.sheetUrl + '?action=getAlumni&t=' + Date.now();
-    var resp = await fetch(url, {method:'GET', mode:'cors'});
-    if (!resp.ok) { console.warn('Alumni load failed:', resp.status); return; }
-    var data = await resp.json();
-    if (!data.alumni || !Array.isArray(data.alumni)) return;
-    // Union by id — the sheet copy and this device's copy are merged so a
-    // full-overwrite push from either side can't drop the other's entries.
+    var snap = await db.collection('alumni').get();
+    var alumniList = snap.docs.map(function(d){ return d.data(); });
+    // Union by id — the database copy and this device's copy are merged so a
+    // partial local cache can't drop entries synced from another device.
     var byId = {};
     _alumniStore.forEach(function(a){ byId[a.id] = a; });
-    data.alumni.forEach(function(a){
+    alumniList.forEach(function(a){
       if (a && a.id && !byId[a.id]) { byId[a.id] = a; _alumniStore.push(a); }
     });
     _saveAlumniLocal();
@@ -1194,14 +1194,12 @@ async function loadAlumniFromSheet() {
 }
 
 function syncAlumniToSheet() {
-  if (!settings.sheetUrl) return;
-  var body = JSON.stringify({action:'saveAlumni', alumni: _alumniStore});
-  if (navigator.sendBeacon) {
-    try { navigator.sendBeacon(settings.sheetUrl, new Blob([body],{type:'text/plain'})); }
-    catch(e) { /* fetch below still runs */ }
-  }
-  fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body,headers:{'Content-Type':'text/plain'}})
-    .catch(function(e){ console.warn('Alumni sync failed:', e.message); });
+  if (!_alumniStore.length) return;
+  var batch = db.batch();
+  _alumniStore.forEach(function(a){
+    if (a && a.id) batch.set(db.collection('alumni').doc(a.id), a);
+  });
+  batch.commit().catch(function(e){ console.warn('Alumni sync failed:', e.message); });
 }
 
 function getAlumniRecords() {
@@ -1346,7 +1344,6 @@ let settings = {
   emailOps: 'rohit@tsgolf.in',
   emailAccounts: 'accounts@tsgolf.in',
   emailHospitality: 'ajo@tsgolf.in',
-  sheetUrl: 'https://script.google.com/macros/s/AKfycbwxXtuFfFFSJijzQO7cu7_8YNz70qKwuUCGrddEpoMII3RZOEIHLpX-eCi4QHEnGnPF/exec',
   programmeTypes: [
     {name:'1 Week', fee:''},
     {name:'1 Month', fee:''},
@@ -1392,94 +1389,57 @@ function loadState() {
     if (savedSettings) { settings = Object.assign({}, settings, JSON.parse(savedSettings)); applySettingsToUI(); initEmailJS(); }
     else { applySettingsToUI(); initEmailJS(); }
     loadAlumniStore();
-    // If sheet URL configured, always load from sheet (skip localStorage for bookings)
-    if (settings.sheetUrl) {
-      bookings = [];
-      renderDashboard();
-      loadFromSheet();
-      loadProgrammeTypesFromSheet();
-      loadAlumniFromSheet();
-    } else {
-      // No sheet — fall back to localStorage
-      const saved = localStorage.getItem('golf_bookings_v5');
-      bookings = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(SAMPLE_DATA));
-      if (!saved) saveState();
-      promoteDepartedToAlumni();
-      renderDashboard();
-      checkLeadHandoffLink();
-    }
+    bookings = [];
+    renderDashboard();
+    loadFromSheet();
+    loadProgrammeTypesFromSheet();
+    loadAlumniFromSheet();
   } catch(e) { bookings = JSON.parse(JSON.stringify(SAMPLE_DATA)); renderDashboard(); }
 }
 
 let _sheetLoadInFlight = false;
 async function loadFromSheet() {
   // Guard against overlapping calls — e.g. the 60s auto-refresh firing again
-  // while a previous call is still mid-retry (each attempt can take up to ~12s).
+  // while a previous call is still mid-flight.
   if (_sheetLoadInFlight) return;
   _sheetLoadInFlight = true;
-  try {
-    await _loadFromSheetAttempt(1);
-  } finally {
-    _sheetLoadInFlight = false;
-  }
-}
-
-async function _loadFromSheetAttempt(attempt) {
-  if(!settings.sheetUrl) return;
-  const MAX_ATTEMPTS = 3;
-  const ATTEMPT_TIMEOUT_MS = 12000;
   let data;
   try {
-    const url = settings.sheetUrl + '?action=getAll&t=' + Date.now();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
-    let resp;
-    try {
-      resp = await fetch(url, {method:'GET', mode:'cors', signal: controller.signal});
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    data = await resp.json();
-    if (!data.bookings || !Array.isArray(data.bookings)) throw new Error('Unexpected response shape');
+    const snap = await db.collection('bookings').get();
+    data = { bookings: snap.docs.map(d => d.data()) };
   } catch(e) {
-    const reason = e.name === 'AbortError' ? 'timed out after ' + (ATTEMPT_TIMEOUT_MS/1000) + 's' : e.message;
-    console.warn('Sheet load failed (attempt ' + attempt + '/' + MAX_ATTEMPTS + '): ' + reason);
-    if (attempt < MAX_ATTEMPTS) {
-      _showSyncToast('⏳ Connection hiccup — retrying (' + (attempt+1) + '/' + MAX_ATTEMPTS + ')…', true);
-      await new Promise(r => setTimeout(r, 1500));
-      return _loadFromSheetAttempt(attempt + 1);
-    }
-    // All retries exhausted — fall back to localStorage so the app isn't left blank
-    _showSyncToast('⚠️ Could not reach the Google Sheet — showing last saved data', true);
+    console.warn('Database load failed: ' + e.message);
+    _sheetLoadInFlight = false;
+    // Fall back to localStorage so the app isn't left blank
+    _showSyncToast('⚠️ Could not reach the database — showing last saved data', true);
     const saved = localStorage.getItem('golf_bookings_v5');
     if (saved) { bookings = JSON.parse(saved); _dlMergeIntoBookings(); promoteDepartedToAlumni(); renderDashboard(); }
     checkLeadHandoffLink();
     return;
   }
-  // Preserve local dispatch log entries that haven't reached the sheet yet.
-  // The sheet POST (no-cors) can take a few seconds to process; a refresh in that
-  // window would otherwise wipe locally-made changes. We take the union of both logs.
+  // Preserve local dispatch log entries that haven't reached the database yet.
+  // A write can take a moment to land; a refresh in that window would otherwise
+  // wipe locally-made changes. We take the union of both logs.
   const localSnapshot = bookings;
   const deletedIds = _loadDeletedIds();
   const mergedSheetBookings = data.bookings
-    .filter(sheetB => !deletedIds[sheetB.id]) // hide anything deleted locally even if the sheet-side delete hasn't landed yet
+    .filter(sheetB => !deletedIds[sheetB.id]) // hide anything deleted locally even if the remote delete hasn't landed yet
     .map(sheetB => {
       const localB = localSnapshot.find(lb => lb.id === sheetB.id);
       if (!localB || !localB.dispatchLog || !Object.keys(localB.dispatchLog).length) return sheetB;
       const mergedLog = Object.assign({}, sheetB.dispatchLog || {}, localB.dispatchLog);
       return Object.assign({}, sheetB, { dispatchLog: mergedLog });
     });
-  // Keep any local drafts not yet synced to sheet (but not ones we've deliberately deleted)
+  // Keep any local drafts not yet synced (but not ones we've deliberately deleted)
   const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id) && !deletedIds[b.id]);
   bookings = [...mergedSheetBookings, ...localDrafts];
   _dlMergeIntoBookings(); // restore any locally-logged dispatch entries
-  // Save clean sheet data to localStorage
+  // Save clean data to localStorage
   localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
   promoteDepartedToAlumni(); // capture anyone whose departure date has passed
   renderDashboard();
   checkLeadHandoffLink();
-  if (attempt > 1) _showSyncToast('✓ Connected', false);
+  _sheetLoadInFlight = false;
 }
 
 function initEmailJS() {
@@ -1582,7 +1542,6 @@ function applySettingsToUI() {
   const map = {'waAdmin':'s-wa-admin','waOps':'s-wa-ops','waAccounts':'s-wa-accounts','waHospitality':'s-wa-hospitality','waTransport':'s-wa-transport',
     'emailAdmin':'s-email-admin','emailOps':'s-email-ops','emailAccounts':'s-email-accounts','emailHospitality':'s-email-hospitality',
     'emailjsKey':'s-emailjs-key','emailjsService':'s-emailjs-service','emailjsTemplate':'s-emailjs-template',
-    'sheetId':'s-sheet-id','sheetUrl':'s-sheet-url',
     'pdfVisiting':'s-pdf-visiting','pdfAnnual':'s-pdf-annual'};
   for (const [k,id] of Object.entries(map)) { const el=document.getElementById(id); if(el&&settings[k]) el.value=settings[k]; }
   renderProgrammeTypesSettings();
@@ -1595,14 +1554,12 @@ function applySettingsToUI() {
 // localStorage drifts independently and fee autofill only works on whichever
 // device the fees were originally entered on.
 async function loadProgrammeTypesFromSheet() {
-  if (!settings.sheetUrl) return;
   try {
-    const url = settings.sheetUrl + '?action=getProgrammeTypes&t=' + Date.now();
-    const resp = await fetch(url, {method:'GET', mode:'cors'});
-    if (!resp.ok) { console.warn('Programme types load failed:', resp.status); return; }
-    const data = await resp.json();
-    if (!data.programmeTypes || !Array.isArray(data.programmeTypes) || !data.programmeTypes.length) return;
-    settings.programmeTypes = data.programmeTypes;
+    const doc = await db.collection('meta').doc('programmeTypes').get();
+    if (!doc.exists) return;
+    const data = doc.data();
+    if (!data.list || !Array.isArray(data.list) || !data.list.length) return;
+    settings.programmeTypes = data.list;
     localStorage.setItem('golf_settings_v2', JSON.stringify(settings));
     renderProgrammeTypesSettings();
     renderProgrammeFilterOptions();
@@ -1614,17 +1571,7 @@ async function loadProgrammeTypesFromSheet() {
 }
 
 function syncProgrammeTypesToSheet() {
-  if (!settings.sheetUrl) return;
-  const body = JSON.stringify({action:'saveProgrammeTypes', programmeTypes: settings.programmeTypes || []});
-  // Fire both: sendBeacon can report success without actually delivering (seen
-  // in practice from a local file:// page), so it's not trustworthy on its own
-  // as a reason to skip the fetch. The backend does a full overwrite either way,
-  // so a duplicate write from both is harmless.
-  if (navigator.sendBeacon) {
-    try { navigator.sendBeacon(settings.sheetUrl, new Blob([body],{type:'text/plain'})); }
-    catch(e) { /* ignore — fetch below still runs */ }
-  }
-  fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body,headers:{'Content-Type':'text/plain'}})
+  db.collection('meta').doc('programmeTypes').set({list: settings.programmeTypes || []})
     .catch(e => console.warn('Programme types sync failed:', e.message));
 }
 
@@ -2749,7 +2696,7 @@ function formatFieldValue(field,value){
 // on screen now). Fields only the other side changed are merged in silently;
 // fields BOTH sides changed (to different values) are returned as conflicts.
 async function checkForConflicts(fromStep){
-  if(!editingBookingId||!formDataBaseline||!settings.sheetUrl) return {conflicts:[]};
+  if(!editingBookingId||!formDataBaseline) return {conflicts:[]};
   // A save we just made syncs to the sheet fire-and-forget (no-cors) and the
   // Apps Script write can take several seconds to land. Re-reading the sheet
   // inside that window returns the PRE-edit values for THIS booking, and the
@@ -2980,11 +2927,9 @@ function deleteDraft(id){
   if(!confirm('Delete this draft?'))return;
   bookings=bookings.filter(b=>b.id!==id);
   saveState();
-  _markDeletedId(id); // so a later sheet sync doesn't resurrect this draft from local cache
-  // Also remove from sheet
-  if(settings.sheetUrl){
-    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'deleteBooking',id}),headers:{'Content-Type':'text/plain'}});
-  }
+  _markDeletedId(id); // so a later sync doesn't resurrect this draft from local cache
+  // Also remove from the database
+  db.collection('bookings').doc(id).delete().catch(e=>console.warn('Delete sync failed:',e.message));
   renderDashboard();
 }
 
@@ -3001,9 +2946,7 @@ function clearUntitledDrafts(){
   saveState();
   junk.forEach(b=>{
     _markDeletedId(b.id);
-    if(settings.sheetUrl){
-      fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'deleteBooking',id:b.id}),headers:{'Content-Type':'text/plain'}});
-    }
+    db.collection('bookings').doc(b.id).delete().catch(e=>console.warn('Delete sync failed:',e.message));
   });
   renderDashboard();
 }
@@ -3195,18 +3138,8 @@ function deleteBooking(id){
   saveState();
   closeModal();
   renderDashboard();
-  // Sync deletion to Google Sheet — fire both sendBeacon and fetch (sendBeacon's
-  // return value only means "queued", not "delivered"; deleteBooking is
-  // idempotent server-side so a duplicate call is harmless).
-  if(settings.sheetUrl){
-    const delBody=JSON.stringify({action:'deleteBooking',id:id});
-    if(navigator.sendBeacon){
-      try{ navigator.sendBeacon(settings.sheetUrl,new Blob([delBody],{type:'text/plain'})); }
-      catch(e){ /* ignore — fetch below still runs */ }
-    }
-    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:delBody})
-    .catch(e=>console.warn('Delete sync failed:',e.message));
-  }
+  // Sync deletion to the database — delete is idempotent so a duplicate call is harmless.
+  db.collection('bookings').doc(id).delete().catch(e=>console.warn('Delete sync failed:',e.message));
 }
 function closeModal(){document.getElementById('view-modal').classList.remove('open');}
 
@@ -3295,13 +3228,13 @@ Reply or call us anytime.
 // ===================== SETTINGS =====================
 function saveSettings() {
   // Merge (not replace) — preserves fields not present in this form, e.g. programmeTypes
-  settings=Object.assign({}, settings, {waAdmin:(document.getElementById('s-wa-admin')||{}).value||'',waOps:document.getElementById('s-wa-ops').value,waAccounts:document.getElementById('s-wa-accounts').value,waHospitality:document.getElementById('s-wa-hospitality').value,waTransport:(document.getElementById('s-wa-transport')||{}).value||'',emailAdmin:(document.getElementById('s-email-admin')||{}).value||'',emailOps:(document.getElementById('s-email-ops')||{}).value||'',emailAccounts:(document.getElementById('s-email-accounts')||{}).value||'',emailHospitality:(document.getElementById('s-email-hospitality')||{}).value||'',emailjsKey:document.getElementById('s-emailjs-key').value,emailjsService:document.getElementById('s-emailjs-service').value,emailjsTemplate:document.getElementById('s-emailjs-template').value,sheetId:document.getElementById('s-sheet-id').value,sheetUrl:document.getElementById('s-sheet-url').value,pdfVisiting:(document.getElementById('s-pdf-visiting')||{}).value||'',pdfAnnual:(document.getElementById('s-pdf-annual')||{}).value||''});
+  settings=Object.assign({}, settings, {waAdmin:(document.getElementById('s-wa-admin')||{}).value||'',waOps:document.getElementById('s-wa-ops').value,waAccounts:document.getElementById('s-wa-accounts').value,waHospitality:document.getElementById('s-wa-hospitality').value,waTransport:(document.getElementById('s-wa-transport')||{}).value||'',emailAdmin:(document.getElementById('s-email-admin')||{}).value||'',emailOps:(document.getElementById('s-email-ops')||{}).value||'',emailAccounts:(document.getElementById('s-email-accounts')||{}).value||'',emailHospitality:(document.getElementById('s-email-hospitality')||{}).value||'',emailjsKey:document.getElementById('s-emailjs-key').value,emailjsService:document.getElementById('s-emailjs-service').value,emailjsTemplate:document.getElementById('s-emailjs-template').value,pdfVisiting:(document.getElementById('s-pdf-visiting')||{}).value||'',pdfAnnual:(document.getElementById('s-pdf-annual')||{}).value||''});
   initEmailJS();
   localStorage.setItem('golf_settings_v2',JSON.stringify(settings));
   const el=document.getElementById('settings-saved');el.style.display='inline';setTimeout(()=>el.style.display='none',2500);
 }
 
-async function testSheetsSync(){const url=document.getElementById('s-sheet-url').value.trim();if(!url){alert('Enter your Apps Script Web App URL first.');return;}const el=document.getElementById('sync-status');el.textContent='Testing...';try{const r=await fetch(url+'?action=ping',{mode:'cors'});el.textContent=r.ok?'✓ Connected!':'✗ Failed ('+r.status+')';}catch(e){el.textContent='✗ Error — check URL';}}
+async function testSheetsSync(){const el=document.getElementById('sync-status');el.textContent='Testing...';try{await db.collection('meta').doc('connectionTest').set({ts:Date.now()});el.textContent='✓ Connected!';}catch(e){el.textContent='✗ Error — '+e.message;}}
 
 function _showSyncToast(msg, isError) {
   let t = document.getElementById('_sync-toast');
@@ -3321,62 +3254,33 @@ function _showSyncToast(msg, isError) {
 }
 
 async function syncToSheets(booking){
-  if(!settings.sheetUrl)return;
-  const body=JSON.stringify({action:'addBooking',booking});
-  // Fire both sendBeacon and fetch. sendBeacon survives the tab being
-  // backgrounded/suspended right after this call (e.g. tapping the Step 3
-  // WhatsApp button on mobile hands off to the native app mid-request, which
-  // kills a plain fetch), but its return value only means "queued", not
-  // "delivered" — it can report success without ever reaching the server
-  // (seen in practice from a local file:// page). The backend upserts by
-  // booking id either way, so a duplicate write from both is harmless.
-  if(navigator.sendBeacon){
-    try{ navigator.sendBeacon(settings.sheetUrl,new Blob([body],{type:'text/plain'})); }
-    catch(e){ /* ignore — fetch below still runs */ }
-  }
   try{
-    // no-cors: request reaches server even though we can't read the response body
-    fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body,headers:{'Content-Type':'text/plain'}})
-      .catch(e=>{ console.warn('Sheets sync failed:',e); _showSyncToast('⚠️ Sheet sync failed — check your connection. Data saved locally.', true); });
-  }catch(e){console.warn('Sheets sync failed:',e); _showSyncToast('⚠️ Sheet sync failed — data saved locally.', true);}
+    await db.collection('bookings').doc(booking.id).set(booking);
+  }catch(e){
+    console.warn('Database sync failed:',e);
+    _showSyncToast('⚠️ Sync failed — check your connection. Data saved locally.', true);
+  }
 }
 
 async function syncAllToSheets(){
-  if(!settings.sheetUrl){alert('No Google Sheet URL configured. Go to Settings → Google Sheets and add your Apps Script URL.');return;}
   const el=document.getElementById('sync-all-status');
   el.style.display='block';
   el.style.color='#6b7280';
   el.textContent='Syncing '+bookings.length+' bookings...';
   try{
-    // Use no-cors — we won't get a response body but the request still reaches the server
-    await fetch(settings.sheetUrl,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'syncAll',bookings}),headers:{'Content-Type':'text/plain'}});
-    el.style.color='#059669';
-    el.textContent='✓ Sent '+bookings.length+' bookings to Google Sheet at '+new Date().toLocaleTimeString()+' — check your sheet to confirm.';
-  }catch(e){
-    // If fetch itself throws, try sending via a form submission (works from file://)
-    try {
-      await new Promise((resolve, reject) => {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = settings.sheetUrl;
-        form.target = '_blank';
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'payload';
-        input.value = JSON.stringify({action:'syncAll',bookings});
-        form.appendChild(input);
-        document.body.appendChild(form);
-        form.submit();
-        document.body.removeChild(form);
-        resolve();
-      });
-      el.style.color='#059669';
-      el.textContent='✓ Sent to Google Sheet — check your sheet to confirm.';
-    } catch(e2){
-      el.style.color='#dc2626';
-      el.textContent='✗ Sync failed: '+e2.message;
-      console.warn('Sheets sync failed:',e,e2);
+    // Firestore batches are capped at 500 writes — chunk to stay under that.
+    for (let i=0;i<bookings.length;i+=400) {
+      const chunk = bookings.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(b => batch.set(db.collection('bookings').doc(b.id), b));
+      await batch.commit();
     }
+    el.style.color='#059669';
+    el.textContent='✓ Sent '+bookings.length+' bookings to the database at '+new Date().toLocaleTimeString()+'.';
+  }catch(e){
+    el.style.color='#dc2626';
+    el.textContent='✗ Sync failed: '+e.message;
+    console.warn('Database sync failed:',e);
   }
 }
 
@@ -3685,7 +3589,7 @@ function checkLeadHandoffLink() {
     // Draft may not have synced to the sheet yet — retry briefly before giving up.
     if (_lhLinkRetries < 5) {
       _lhLinkRetries++;
-      setTimeout(() => { if (settings.sheetUrl) loadFromSheet(); else checkLeadHandoffLink(); }, 1500);
+      setTimeout(() => { loadFromSheet(); }, 1500);
     } else {
       alert('Couldn\'t find that handed-off booking yet — ask them to check their connection, then reopen the link.');
       window.history.replaceState({}, '', window.location.pathname);
@@ -4138,8 +4042,8 @@ async function doLogin() {
   clearSearchInput();
   renderDashboard();
   [300, 800, 1500, 3000, 6000, 10000, 15000].forEach(ms => setTimeout(clearSearchInput, ms));
-  // Auto-refresh from sheet every 60s so both users see each other's dispatch updates
-  if (settings.sheetUrl && !window._syncInterval) {
+  // Auto-refresh from the database every 60s so both users see each other's dispatch updates
+  if (!window._syncInterval) {
     window._syncInterval = setInterval(async () => {
       if (document.querySelector('.modal-overlay.open')) return;
       // Don't swap the bookings array out from under an in-progress booking edit —
