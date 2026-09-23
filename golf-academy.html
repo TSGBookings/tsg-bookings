@@ -386,7 +386,7 @@ textarea { resize: vertical; min-height: 80px; }
         <span class="nav-icon">🎓</span>
         <span class="nav-label">Alumni</span>
       </div>
-      <div class="nav-item" data-section="settings" onclick="showSection('settings', this)">
+      <div class="nav-item" id="nav-settings" data-section="settings" onclick="showSection('settings', this)" style="display:none">
         <span class="nav-icon">⚙️</span>
         <span class="nav-label">Settings</span>
       </div>
@@ -546,17 +546,7 @@ textarea { resize: vertical; min-height: 80px; }
 
         <div class="settings-section">
           <h3>📄 Things to Carry — PDF Links</h3>
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Visiting Programme PDF Link</label>
-              <input id="s-pdf-visiting" type="text" placeholder="https://drive.google.com/...">
-            </div>
-            <div class="form-group">
-              <label>Annual Programme PDF Link</label>
-              <input id="s-pdf-annual" type="text" placeholder="https://drive.google.com/...">
-            </div>
-          </div>
-          <div class="settings-tip">Paste a shareable Google Drive (or Dropbox) link. The correct PDF is auto-appended to the Things to Carry message based on the booking's programme type.</div>
+          <div class="settings-tip">The Visiting and Annual programme PDFs are hosted directly on GitHub alongside this app. To replace one, upload a new file with the same name (<code>things-to-carry-visiting.pdf</code> or <code>things-to-carry-annual.pdf</code>) via GitHub → Add file → Upload files → Commit. No Settings field to edit here anymore.</div>
         </div>
 
         <div class="settings-section">
@@ -565,11 +555,18 @@ textarea { resize: vertical; min-height: 80px; }
             <button class="btn btn-secondary btn-sm" onclick="exportData()">⬇ Export JSON Backup</button>
             <button class="btn btn-secondary btn-sm" onclick="importData()">⬆ Import JSON</button>
             <button class="btn btn-primary btn-sm" onclick="syncAllToSheets()">☁ Sync All to Database</button>
-            <button class="btn btn-danger btn-sm" onclick="resetToSample()">↺ Reset to Sample Data</button>
             <button class="btn btn-secondary btn-sm" onclick="markOnCampusAsDone()">✅ Mark On-Campus Dispatch Done (≤ 15 Jun)</button>
           </div>
           <div id="sync-all-status" style="margin-top:8px;font-size:13px;color:#059669;display:none"></div>
           <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="handleImportFile(event)">
+        </div>
+
+        <div class="settings-section" style="border:1.5px solid #fca5a5;border-radius:10px;padding:16px;background:#fef2f2">
+          <h3 style="color:#991b1b">⚠️ Danger Zone</h3>
+          <div class="flex gap-12" style="flex-wrap:wrap">
+            <button class="btn btn-danger btn-sm" onclick="resetToSample()">↺ Reset to Sample Data</button>
+          </div>
+          <div class="settings-tip" style="color:#991b1b">This permanently replaces every current booking with sample data. There is no undo — export a backup first if you're not sure.</div>
         </div>
 
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
@@ -1174,23 +1171,30 @@ function promoteOneToAlumni(b) {
   syncAlumniToSheet();
 }
 
-async function loadAlumniFromSheet() {
-  try {
-    var snap = await db.collection('alumni').get();
-    var alumniList = snap.docs.map(function(d){ return d.data(); });
-    // Union by id — the database copy and this device's copy are merged so a
-    // partial local cache can't drop entries synced from another device.
-    var byId = {};
-    _alumniStore.forEach(function(a){ byId[a.id] = a; });
-    alumniList.forEach(function(a){
-      if (a && a.id && !byId[a.id]) { byId[a.id] = a; _alumniStore.push(a); }
+// Real-time listener, same reasoning as startBookingsListener() above —
+// avoids re-reading the whole alumni collection every 60s.
+var _alumniListenerStarted = false;
+function startAlumniListener() {
+  if (_alumniListenerStarted) return;
+  _alumniListenerStarted = true;
+  db.collection('alumni').onSnapshot(function(snapshot) {
+    snapshot.docChanges().forEach(function(change) {
+      var a = change.doc.data();
+      var idx = _alumniStore.findIndex(function(x){ return x.id === a.id; });
+      if (change.type === 'removed') { if (idx >= 0) _alumniStore.splice(idx, 1); }
+      else if (idx >= 0) _alumniStore[idx] = a;
+      else _alumniStore.push(a);
     });
     _saveAlumniLocal();
     var active = document.querySelector('.section.active');
     if (active && active.id === 'section-alumni') renderAlumni();
-  } catch(e) {
-    console.warn('Alumni load failed, using local cache:', e.message);
-  }
+  }, function(e) {
+    console.warn('Alumni listener failed, using local cache:', e.message);
+  });
+}
+
+function loadAlumniFromSheet() {
+  startAlumniListener();
 }
 
 function syncAlumniToSheet() {
@@ -1397,32 +1401,58 @@ function loadState() {
   } catch(e) { bookings = JSON.parse(JSON.stringify(SAMPLE_DATA)); renderDashboard(); }
 }
 
-let _sheetLoadInFlight = false;
-async function loadFromSheet() {
-  // Guard against overlapping calls — e.g. the 60s auto-refresh firing again
-  // while a previous call is still mid-flight.
-  if (_sheetLoadInFlight) return;
-  _sheetLoadInFlight = true;
-  let data;
-  try {
-    const snap = await db.collection('bookings').get();
-    data = { bookings: snap.docs.map(d => d.data()) };
-  } catch(e) {
-    console.warn('Database load failed: ' + e.message);
-    _sheetLoadInFlight = false;
-    // Fall back to localStorage so the app isn't left blank
+// Real-time bookings sync — a single onSnapshot listener replaces the old
+// "re-fetch everything every 60s" polling. Firestore bills the initial
+// snapshot's document reads once, then ~1 read per document that actually
+// changes afterward — instead of re-reading the whole collection on every
+// tick. That's what was blowing through the daily free-tier read quota
+// (each tab open all day was re-reading ~135 docs every 60s).
+let _serverBookingsById = {};
+let _bookingsListenerStarted = false;
+let _pendingBookingsRebuild = false;
+
+function startBookingsListener() {
+  if (_bookingsListenerStarted) return;
+  _bookingsListenerStarted = true;
+  db.collection('bookings').onSnapshot(function(snapshot) {
+    snapshot.docChanges().forEach(function(change) {
+      if (change.type === 'removed') delete _serverBookingsById[change.doc.id];
+      else _serverBookingsById[change.doc.id] = change.doc.data();
+    });
+    _rebuildBookingsFromServerMirror();
+  }, function(e) {
+    console.warn('Bookings listener failed: ' + e.message);
     _showSyncToast('⚠️ Could not reach the database — showing last saved data', true);
     const saved = localStorage.getItem('golf_bookings_v5');
     if (saved) { bookings = JSON.parse(saved); _dlMergeIntoBookings(); promoteDepartedToAlumni(); renderDashboard(); }
     checkLeadHandoffLink();
-    return;
-  }
+  });
+}
+
+// loadFromSheet() is kept as the entry point every existing call site already
+// uses (initial load, lead-handoff retry, etc.) — it just makes sure the live
+// listener is running; the listener itself delivers updates as they happen.
+function loadFromSheet() {
+  startBookingsListener();
+}
+
+function _rebuildBookingsFromServerMirror() {
+  // Don't swap the bookings array out from under an open modal or an
+  // in-progress booking edit — that's how edits used to get orphaned and
+  // re-saved as fresh drafts. Defer to the cheap local recheck timer below.
+  if (document.querySelector('.modal-overlay.open')) { _pendingBookingsRebuild = true; return; }
+  const bookingSection = document.getElementById('section-booking');
+  if (bookingSection && bookingSection.classList.contains('active') &&
+      (editingBookingId || (formData && Object.keys(formData).length))) { _pendingBookingsRebuild = true; return; }
+  if (window._lastWriteTime && (Date.now() - window._lastWriteTime) < 30000) { _pendingBookingsRebuild = true; return; }
+  _pendingBookingsRebuild = false;
   // Preserve local dispatch log entries that haven't reached the database yet.
-  // A write can take a moment to land; a refresh in that window would otherwise
+  // A write can take a moment to land; a rebuild in that window would otherwise
   // wipe locally-made changes. We take the union of both logs.
   const localSnapshot = bookings;
   const deletedIds = _loadDeletedIds();
-  const mergedSheetBookings = data.bookings
+  const serverBookings = Object.values(_serverBookingsById);
+  const mergedServerBookings = serverBookings
     .filter(sheetB => !deletedIds[sheetB.id]) // hide anything deleted locally even if the remote delete hasn't landed yet
     .map(sheetB => {
       const localB = localSnapshot.find(lb => lb.id === sheetB.id);
@@ -1431,15 +1461,14 @@ async function loadFromSheet() {
       return Object.assign({}, sheetB, { dispatchLog: mergedLog });
     });
   // Keep any local drafts not yet synced (but not ones we've deliberately deleted)
-  const localDrafts = bookings.filter(b => b.isDraft && !data.bookings.find(s => s.id === b.id) && !deletedIds[b.id]);
-  bookings = [...mergedSheetBookings, ...localDrafts];
+  const localDrafts = bookings.filter(b => b.isDraft && !_serverBookingsById[b.id] && !deletedIds[b.id]);
+  bookings = [...mergedServerBookings, ...localDrafts];
   _dlMergeIntoBookings(); // restore any locally-logged dispatch entries
   // Save clean data to localStorage
   localStorage.setItem('golf_bookings_v5', JSON.stringify(bookings));
   promoteDepartedToAlumni(); // capture anyone whose departure date has passed
   renderDashboard();
   checkLeadHandoffLink();
-  _sheetLoadInFlight = false;
 }
 
 function initEmailJS() {
@@ -1541,8 +1570,7 @@ function _markDeletedId(id) {
 function applySettingsToUI() {
   const map = {'waAdmin':'s-wa-admin','waOps':'s-wa-ops','waAccounts':'s-wa-accounts','waHospitality':'s-wa-hospitality','waTransport':'s-wa-transport',
     'emailAdmin':'s-email-admin','emailOps':'s-email-ops','emailAccounts':'s-email-accounts','emailHospitality':'s-email-hospitality',
-    'emailjsKey':'s-emailjs-key','emailjsService':'s-emailjs-service','emailjsTemplate':'s-emailjs-template',
-    'pdfVisiting':'s-pdf-visiting','pdfAnnual':'s-pdf-annual'};
+    'emailjsKey':'s-emailjs-key','emailjsService':'s-emailjs-service','emailjsTemplate':'s-emailjs-template'};
   for (const [k,id] of Object.entries(map)) { const el=document.getElementById(id); if(el&&settings[k]) el.value=settings[k]; }
   renderProgrammeTypesSettings();
   renderProgrammeFilterOptions();
@@ -1553,9 +1581,14 @@ function applySettingsToUI() {
 // bookings use (a dedicated ProgrammeTypes tab) — otherwise each device's
 // localStorage drifts independently and fee autofill only works on whichever
 // device the fees were originally entered on.
-async function loadProgrammeTypesFromSheet() {
-  try {
-    const doc = await db.collection('meta').doc('programmeTypes').get();
+// Real-time listener on the single programmeTypes doc — cheap either way
+// (it's one document) but kept consistent with the bookings/alumni listeners
+// so this doesn't need its own place in the 60s-poll-turned-recheck-timer.
+var _ptListenerStarted = false;
+function startProgrammeTypesListener() {
+  if (_ptListenerStarted) return;
+  _ptListenerStarted = true;
+  db.collection('meta').doc('programmeTypes').onSnapshot(function(doc) {
     if (!doc.exists) return;
     const data = doc.data();
     if (!data.list || !Array.isArray(data.list) || !data.list.length) return;
@@ -1565,9 +1598,13 @@ async function loadProgrammeTypesFromSheet() {
     renderProgrammeFilterOptions();
     // Refresh the live select if the booking form happens to be open
     if (document.getElementById('f-prog')) renderStep();
-  } catch(e) {
-    console.warn('Programme types load failed, using local cache:', e.message);
-  }
+  }, function(e) {
+    console.warn('Programme types listener failed, using local cache:', e.message);
+  });
+}
+
+function loadProgrammeTypesFromSheet() {
+  startProgrammeTypesListener();
 }
 
 function syncProgrammeTypesToSheet() {
@@ -1642,6 +1679,9 @@ function renderProgrammeFilterOptions() {
 
 // ===================== NAVIGATION =====================
 function showSection(name, el) {
+  // Settings (including the Danger Zone) is Rokhsar-only — block even a direct
+  // call, not just the hidden nav item, so Admin can never land here.
+  if (name === 'settings' && currentUser !== 'Rokhsar') { name = 'monthly'; el = null; }
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
@@ -2697,16 +2737,13 @@ function formatFieldValue(field,value){
 // fields BOTH sides changed (to different values) are returned as conflicts.
 async function checkForConflicts(fromStep){
   if(!editingBookingId||!formDataBaseline) return {conflicts:[]};
-  // A save we just made syncs to the sheet fire-and-forget (no-cors) and the
-  // Apps Script write can take several seconds to land. Re-reading the sheet
-  // inside that window returns the PRE-edit values for THIS booking, and the
-  // diff below then "helpfully" reverts the user's change
-  // (theirsChanged && !oursChanged) or raises a phantom conflict — e.g. edit a
-  // fee, step to Preview & Dispatch, hit Back, save again → fee snaps back.
-  // Skip the round-trip while our own write to this same booking is in flight.
+  // `bookings` is kept continuously fresh by the real-time database listener,
+  // so no explicit re-fetch is needed here. Still skip the diff for a few
+  // seconds right after our own write, purely as a safety margin — e.g. edit a
+  // fee, step to Preview & Dispatch, hit Back, save again shouldn't ever have
+  // a chance to "helpfully" revert the change we just made.
   const lw=window._lastBookingWrite;
   if(lw && lw.id===editingBookingId && (Date.now()-lw.at) < 15000) return {conflicts:[]};
-  await loadFromSheet();
   const serverB=bookings.find(b=>b.id===editingBookingId);
   if(!serverB) return {conflicts:[]}; // deleted elsewhere — nothing to diff against
   const fields=fromStep>=2?[...STEP1_FIELDS,...STEP2_FIELDS]:STEP1_FIELDS;
@@ -2951,9 +2988,14 @@ function clearUntitledDrafts(){
   renderDashboard();
 }
 
+// Hosted directly alongside golf-academy.html on GitHub Pages — to replace a
+// PDF, upload a new file with the same name via GitHub (Add file → Upload
+// files → Commit), overwriting the old one. No code change needed.
+const THINGS_TO_CARRY_PDF_VISITING = 'https://tsgbookings.github.io/tsg-bookings/things-to-carry-visiting.pdf';
+const THINGS_TO_CARRY_PDF_ANNUAL = 'https://tsgbookings.github.io/tsg-bookings/things-to-carry-annual.pdf';
 function getPdfLinkForBooking(b) {
   const isAnnual = (b.programmeType||'').toLowerCase().includes('annual');
-  return isAnnual ? (settings.pdfAnnual||'') : (settings.pdfVisiting||'');
+  return isAnnual ? THINGS_TO_CARRY_PDF_ANNUAL : THINGS_TO_CARRY_PDF_VISITING;
 }
 
 function buildThingsToCarryMsg(b, pdfLink) {
@@ -3228,7 +3270,7 @@ Reply or call us anytime.
 // ===================== SETTINGS =====================
 function saveSettings() {
   // Merge (not replace) — preserves fields not present in this form, e.g. programmeTypes
-  settings=Object.assign({}, settings, {waAdmin:(document.getElementById('s-wa-admin')||{}).value||'',waOps:document.getElementById('s-wa-ops').value,waAccounts:document.getElementById('s-wa-accounts').value,waHospitality:document.getElementById('s-wa-hospitality').value,waTransport:(document.getElementById('s-wa-transport')||{}).value||'',emailAdmin:(document.getElementById('s-email-admin')||{}).value||'',emailOps:(document.getElementById('s-email-ops')||{}).value||'',emailAccounts:(document.getElementById('s-email-accounts')||{}).value||'',emailHospitality:(document.getElementById('s-email-hospitality')||{}).value||'',emailjsKey:document.getElementById('s-emailjs-key').value,emailjsService:document.getElementById('s-emailjs-service').value,emailjsTemplate:document.getElementById('s-emailjs-template').value,pdfVisiting:(document.getElementById('s-pdf-visiting')||{}).value||'',pdfAnnual:(document.getElementById('s-pdf-annual')||{}).value||''});
+  settings=Object.assign({}, settings, {waAdmin:(document.getElementById('s-wa-admin')||{}).value||'',waOps:document.getElementById('s-wa-ops').value,waAccounts:document.getElementById('s-wa-accounts').value,waHospitality:document.getElementById('s-wa-hospitality').value,waTransport:(document.getElementById('s-wa-transport')||{}).value||'',emailAdmin:(document.getElementById('s-email-admin')||{}).value||'',emailOps:(document.getElementById('s-email-ops')||{}).value||'',emailAccounts:(document.getElementById('s-email-accounts')||{}).value||'',emailHospitality:(document.getElementById('s-email-hospitality')||{}).value||'',emailjsKey:document.getElementById('s-emailjs-key').value,emailjsService:document.getElementById('s-emailjs-service').value,emailjsTemplate:document.getElementById('s-emailjs-template').value});
   initEmailJS();
   localStorage.setItem('golf_settings_v2',JSON.stringify(settings));
   const el=document.getElementById('settings-saved');el.style.display='inline';setTimeout(()=>el.style.display='none',2500);
@@ -4028,9 +4070,12 @@ async function doLogin() {
   }
   currentUser = user;
   document.getElementById('login-overlay').style.display = 'none';
-  // Show/hide revenue nav item based on user
+  // Show/hide revenue and settings nav items based on user — Settings (including
+  // the Danger Zone) is Rokhsar-only.
   const revNav = document.getElementById('nav-revenue');
   if (revNav) revNav.style.display = (user === 'Rokhsar') ? 'flex' : 'none';
+  const settingsNav = document.getElementById('nav-settings');
+  if (settingsNav) settingsNav.style.display = (user === 'Rokhsar') ? 'flex' : 'none';
   // The search field sits behind the login overlay while hidden — Chrome appears to
   // apply its remembered value only once the field becomes visible/interactive here,
   // which is after init()'s own clear already ran. Chrome's autofill timing is
@@ -4042,24 +4087,18 @@ async function doLogin() {
   clearSearchInput();
   renderDashboard();
   [300, 800, 1500, 3000, 6000, 10000, 15000].forEach(ms => setTimeout(clearSearchInput, ms));
-  // Auto-refresh from the database every 60s so both users see each other's dispatch updates
+  // Bookings/alumni/programme types now update live via Firestore listeners
+  // (see startBookingsListener() etc.) instead of polling every 60s — that
+  // polling was re-reading the entire database on every tick and was the
+  // direct cause of blowing through the daily free-tier read quota. This
+  // timer does no database reads at all: it just re-applies data the listener
+  // already received, for the rare tick where a live update arrived while a
+  // modal was open or a booking was being edited (see _pendingBookingsRebuild
+  // in _rebuildBookingsFromServerMirror()).
   if (!window._syncInterval) {
-    window._syncInterval = setInterval(async () => {
-      if (document.querySelector('.modal-overlay.open')) return;
-      // Don't swap the bookings array out from under an in-progress booking edit —
-      // that's how edits got orphaned and re-saved as fresh drafts.
-      const bookingSection = document.getElementById('section-booking');
-      if (bookingSection && bookingSection.classList.contains('active') &&
-          (editingBookingId || (formData && Object.keys(formData).length))) return;
-      // Skip refresh if a local write happened in the last 30 seconds — avoids
-      // overwriting dispatch log changes before the sheet POST has been processed
-      if (window._lastWriteTime && (Date.now() - window._lastWriteTime) < 30000) return;
-      await loadFromSheet();
-      await loadAlumniFromSheet(); // pull in visitors other devices have promoted
-      // loadFromSheet() already calls renderDashboard(), which also refreshes the monthly calendar
-      const active = document.querySelector('.section.active');
-      if (active && active.id === 'section-alumni') renderAlumni();
-    }, 60000);
+    window._syncInterval = setInterval(() => {
+      if (_pendingBookingsRebuild) _rebuildBookingsFromServerMirror();
+    }, 20000);
   }
 }
 
