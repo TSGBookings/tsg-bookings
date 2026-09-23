@@ -1080,7 +1080,7 @@ const ALUMNI_HISTORICAL = [
 // visitor only showed for as long as their booking row still existed, so any
 // pipeline cleanup (or a stale syncAll) erased them for good. Now, once a
 // booking's departure date has passed, the visitor is *copied* into
-// golf_alumni_v1 (and the sheet's Alumni tab) and kept there permanently.
+// golf_alumni_v1 (and the database's alumni collection) and kept there permanently.
 // getAlumniRecords() reads this store first and only falls back to live
 // bookings for visitors not yet promoted.
 const ALUMNI_STORE_KEY = 'golf_alumni_v1';
@@ -1453,12 +1453,12 @@ function _rebuildBookingsFromServerMirror() {
   const deletedIds = _loadDeletedIds();
   const serverBookings = Object.values(_serverBookingsById);
   const mergedServerBookings = serverBookings
-    .filter(sheetB => !deletedIds[sheetB.id]) // hide anything deleted locally even if the remote delete hasn't landed yet
-    .map(sheetB => {
-      const localB = localSnapshot.find(lb => lb.id === sheetB.id);
-      if (!localB || !localB.dispatchLog || !Object.keys(localB.dispatchLog).length) return sheetB;
-      const mergedLog = Object.assign({}, sheetB.dispatchLog || {}, localB.dispatchLog);
-      return Object.assign({}, sheetB, { dispatchLog: mergedLog });
+    .filter(serverB => !deletedIds[serverB.id]) // hide anything deleted locally even if the remote delete hasn't landed yet
+    .map(serverB => {
+      const localB = localSnapshot.find(lb => lb.id === serverB.id);
+      if (!localB || !localB.dispatchLog || !Object.keys(localB.dispatchLog).length) return serverB;
+      const mergedLog = Object.assign({}, serverB.dispatchLog || {}, localB.dispatchLog);
+      return Object.assign({}, serverB, { dispatchLog: mergedLog });
     });
   // Keep any local drafts not yet synced (but not ones we've deliberately deleted)
   const localDrafts = bookings.filter(b => b.isDraft && !_serverBookingsById[b.id] && !deletedIds[b.id]);
@@ -1538,13 +1538,13 @@ function saveState() {
 }
 
 // ─── DELETED-DRAFT TOMBSTONES ────────────────────────────────────────────────
-// loadFromSheet() preserves any local draft the sheet doesn't know about yet,
-// so a draft that hasn't synced isn't lost. But that same check can't tell
-// "never synced" apart from "synced, then deleted" — without this, a deleted
-// draft still cached in this browser's `bookings`/localStorage gets merged
-// right back in on the next sheet load (including the 60s auto-refresh).
+// The bookings listener preserves any local draft the database doesn't know
+// about yet, so a draft that hasn't synced isn't lost. But that same check
+// can't tell "never synced" apart from "synced, then deleted" — without this,
+// a deleted draft still cached in this browser's `bookings`/localStorage gets
+// merged right back in on the next rebuild.
 // Recording deleted ids here (with a short TTL — just long enough for the
-// deletion to reach every device via the sheet) lets the merge tell them apart.
+// deletion to reach every device) lets the merge tell them apart.
 const DELETED_IDS_KEY = 'golf_deleted_ids_v1';
 const DELETED_ID_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -1577,10 +1577,10 @@ function applySettingsToUI() {
 }
 
 // ===================== PROGRAMME TYPES =====================
-// Programme fees are shared across every device via the same Google Sheet the
-// bookings use (a dedicated ProgrammeTypes tab) — otherwise each device's
-// localStorage drifts independently and fee autofill only works on whichever
-// device the fees were originally entered on.
+// Programme fees are shared across every device via the same Firestore
+// database the bookings use (a dedicated programmeTypes doc) — otherwise each
+// device's localStorage drifts independently and fee autofill only works on
+// whichever device the fees were originally entered on.
 // Real-time listener on the single programmeTypes doc — cheap either way
 // (it's one document) but kept consistent with the bookings/alumni listeners
 // so this doesn't need its own place in the 60s-poll-turned-recheck-timer.
@@ -1892,9 +1892,9 @@ function renderRevenue() {
 
 // Reads the filter bar (mode + month/range + programme + search) and returns
 // matching live bookings, sorted newest-arrival-first.
-// Chrome sometimes autofills #search-input with an unrelated remembered value (e.g. a
-// Google Drive link from the PDF-link Settings fields), even with autocomplete="off" and
-// an init-time clear — it can reapply the autofill later, after the page has settled.
+// Chrome sometimes autofills #search-input with an unrelated remembered URL, even
+// with autocomplete="off" and an init-time clear — it can reapply the autofill
+// later, after the page has settled.
 // This guards the actual filtering so a stray URL can never hide every real booking.
 function getSearchQuery() {
   const el = document.getElementById('search-input');
@@ -2636,7 +2636,7 @@ Confirm room allocation by end of day.`;
   return {opsMsg,accountsMsg,hospitalityMsg,reminderDate};
 }
 
-// Persists formData to bookings[] (insert or update) and syncs to the sheet.
+// Persists formData to bookings[] (insert or update) and syncs to the database.
 // Called from step 2 (Programme Details) — step 3 is preview/dispatch only, no save action.
 function persistBooking() {
   const f=formData;
@@ -2644,7 +2644,7 @@ function persistBooking() {
   let booking;
   // Fall back to an id carried on formData if editingBookingId was reset by a
   // re-render mid-edit — otherwise the else-branch mints a fresh uid() and the
-  // same booking lands on the sheet as a second row.
+  // same booking gets duplicated as a second document.
   const targetId=editingBookingId||f.id;
   const idx=targetId?bookings.findIndex(b=>b.id===targetId):-1;
   if(idx>=0){
@@ -2731,7 +2731,7 @@ function formatFieldValue(field,value){
   return String(value);
 }
 
-// Refreshes from the shared sheet, then diffs the current shared state against
+// Diffs the current shared state (kept live by the database listener) against
 // formDataBaseline (what this device last knew) and against formData (what's
 // on screen now). Fields only the other side changed are merged in silently;
 // fields BOTH sides changed (to different values) are returned as conflicts.
@@ -2866,12 +2866,12 @@ function captureFormData(fromStep){
   }
 }
 
-// Persists formData as a draft booking and syncs it to the shared sheet.
+// Persists formData as a draft booking and syncs it to the shared database.
 // Returns the saved booking, or null if the user cancelled (no student name).
 function persistDraft(fromStep){
   const f=formData;
   // Guard against saving a hollow shell — this is what was spawning waves of
-  // "(Untitled draft)" rows on the shared sheet when the form got navigated away
+  // "(Untitled draft)" documents when the form got navigated away
   // from with an orphaned (editingBookingId === null) state.
   if(!editingBookingId){
     const hasAnything=(f.studentName&&f.studentName.trim())||(f.parentName&&f.parentName.trim())
@@ -3366,220 +3366,6 @@ function handleImportFile(event){
 
 function resetToSample(){if(!confirm('Reset all bookings to April 2026 sample data? Current bookings will be lost.'))return;bookings=JSON.parse(JSON.stringify(SAMPLE_DATA));saveState();renderDashboard();alert('Reset complete.');}
 
-function copyAppsScript(){
-  const s = `// TSG Golf Academy — Bookings Google Apps Script
-// Deploy as Web App: Execute as Me, Anyone can access
-// v9 — SpreadsheetApp.flush() inside the lock so a queued request can't read a
-//      stale sheet and re-append; addBooking now collapses any duplicate rows
-// v8 — LockService around doPost so concurrent sendBeacon+fetch writes can't
-//      double-append the same booking; deleteBooking now clears every matching row
-// v7 — adds GST flag column, dispatchLog column, fixes date/time auto-conversion
-
-// Column layout (1-indexed):
-// 1=ID, 2=Student, 3=Age, 4=Gender, 5=City, 6=Parent, 7=Phone, 8=Email,
-// 9=Programme, 10=Inclusions, 11=Arrival Date, 12=Arrival Time, 13=Training From,
-// 14=Training To, 15=Departure, 16=Programme Fee, 17=Misc Fees, 18=GST Amount,
-// 19=Discount, 20=Total, 21=Accounts Notes, 22=Special Notes, 23=Status,
-// 24=Created, 25=Is Draft, 26=Traveller Name, 27=Traveller Contact, 28=Flight No,
-// 29=Flight Arrival Time, 30=Terminal, 31=Accompanying Staff,
-// 32=GST Flag, 33=Discount Flag, 34=Dispatch Log
-
-const HEADERS = [
-  'ID','Student','Age','Gender','City','Parent','Phone','Email',
-  'Programme','Inclusions','Arrival Date','Arrival Time','Training From',
-  'Training To','Departure','Programme Fee','Misc Fees','GST','Discount','Total',
-  'Accounts Notes','Special Notes','Status','Created','Is Draft',
-  'Traveller Name','Traveller Contact','Flight No','Flight Arrival Time','Terminal',
-  'Accompanying Staff','GST Flag','Discount Flag','Dispatch Log'
-];
-
-const SPREADSHEET_ID = '1Nk-zFjOYd4UvWN_HyYvWqgr-R7e7Div_K8PotX_X0Nc';
-
-function getSheet() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let sheet = ss.getSheetByName('Bookings');
-  if (!sheet) {
-    sheet = ss.insertSheet('Bookings');
-    sheet.appendRow(HEADERS);
-    sheet.getRange(1,1,1,HEADERS.length).setFontWeight('bold').setBackground('#021b3b').setFontColor('#ffffff');
-    sheet.setFrozenRows(1);
-  }
-  var textCols = [11, 12, 13, 14, 15];
-  textCols.forEach(function(col) {
-    sheet.getRange(2, col, 1000, 1).setNumberFormat('@STRING@');
-  });
-  return sheet;
-}
-
-function formatDate(val) {
-  if (!val) return '';
-  if (val instanceof Date) {
-    var y = val.getFullYear();
-    if (y < 1990) return '';
-    var m = String(val.getMonth()+1).padStart(2,'0');
-    var d = String(val.getDate()).padStart(2,'0');
-    return y+'-'+m+'-'+d;
-  }
-  var s = String(val).trim();
-  if (s.includes('T')) {
-    var dt = new Date(s);
-    if (!isNaN(dt.getTime()) && dt.getFullYear() > 1990) {
-      return dt.getUTCFullYear()+'-'+String(dt.getUTCMonth()+1).padStart(2,'0')+'-'+String(dt.getUTCDate()).padStart(2,'0');
-    }
-    return '';
-  }
-  if (s.match(/^\\d{4}-\\d{2}-\\d{2}$/)) return s;
-  return s;
-}
-
-function formatTime(val) {
-  if (!val) return '';
-  if (val instanceof Date) {
-    var h = String(val.getHours()).padStart(2,'0');
-    var m = String(val.getMinutes()).padStart(2,'0');
-    return h+':'+m;
-  }
-  var s = String(val).trim();
-  if (s.match(/^\\d{1,2}:\\d{2}(:\\d{2})?$/)) return s.substring(0,5);
-  return s;
-}
-
-function bookingToRow(b) {
-  const inv = {base:Number(b.invoiceAmount||0), misc:Number(b.miscFees||0)};
-  inv.discount = b.discountApplicable ? Number(b.discountAmount||0) : 0;
-  inv.netFee = inv.base - inv.discount;
-  inv.preGst = inv.netFee + inv.misc;
-  inv.gst = b.gstApplicable ? Math.round(inv.preGst * 0.18) : 0;
-  inv.total = inv.preGst + inv.gst;
-  const td = b.trainingPeriod ? b.trainingPeriod.split(' to ') : ['',''];
-  const trainingFrom = b.trainingStartDate || td[0] || '';
-  const trainingTo   = b.trainingEndDate   || td[1] || '';
-  const dispatchLogStr = b.dispatchLog && Object.keys(b.dispatchLog).length ? JSON.stringify(b.dispatchLog) : '';
-  return [
-    b.id, b.studentName, b.age, b.gender, b.homeCity, b.parentName, b.phone, b.email,
-    b.programmeType, (b.inclusions||[]).join(', '),
-    b.arrivalDate||'', b.arrivalTime||'', trainingFrom, trainingTo, b.departureDate||'',
-    inv.base, inv.misc, inv.gst, inv.discount, inv.total,
-    b.accountsNotes||'', b.specialNotes||'', b.status||(b.isDraft?'draft':'confirmed'), b.createdAt||'',
-    b.isDraft ? 'YES' : '',
-    b.travellerName||'', b.travellerContact||'', b.flightNo||'', b.flightArrivalTime||'',
-    b.terminal||'', b.accompanyingStaff||'',
-    b.gstApplicable ? 'YES' : '',
-    b.discountApplicable ? 'YES' : '',
-    dispatchLogStr
-  ];
-}
-
-function doPost(e) {
-  // Serialise every write. The web app fires two near-simultaneous requests per
-  // save (navigator.sendBeacon + fetch); without this lock both can read the id
-  // column before either appends, both treat a new id as missing, and both
-  // appendRow — producing two identical rows with the same id.
-  const lock = LockService.getScriptLock();
-  try { lock.waitLock(20000); } catch (lockErr) {
-    return ContentService.createTextOutput(JSON.stringify({error:'busy, retry'})).setMimeType(ContentService.MimeType.JSON);
-  }
-  try {
-    const data = JSON.parse(e.postData.contents);
-    const sheet = getSheet();
-    if (data.action === 'addBooking') {
-      const b = data.booking;
-      const ids = sheet.getRange(2,1,Math.max(sheet.getLastRow()-1,1),1).getValues().flat();
-      const matches = [];
-      for (let i = 0; i < ids.length; i++) if (ids[i] === b.id) matches.push(i);
-      if (matches.length === 0) {
-        sheet.appendRow(bookingToRow(b));
-      } else {
-        sheet.getRange(matches[0]+2, 1, 1, HEADERS.length).setValues([bookingToRow(b)]);
-        for (let k = matches.length - 1; k >= 1; k--) sheet.deleteRow(matches[k]+2);
-      }
-    }
-    if (data.action === 'deleteBooking') {
-      const id = data.id;
-      const ids = sheet.getRange(2,1,Math.max(sheet.getLastRow()-1,1),1).getValues().flat();
-      for (let i = ids.length - 1; i >= 0; i--) {
-        if (ids[i] === id) sheet.deleteRow(i + 2);
-      }
-    }
-    if (data.action === 'syncAll') {
-      const bookings = data.bookings || [];
-      if (sheet.getLastRow() > 1) sheet.getRange(2,1,sheet.getLastRow()-1,HEADERS.length).clearContent();
-      if (bookings.length > 0) {
-        const rows = bookings.map(bookingToRow);
-        sheet.getRange(2,1,rows.length,HEADERS.length).setValues(rows);
-      }
-    }
-    SpreadsheetApp.flush();
-    return ContentService.createTextOutput(JSON.stringify({success:true})).setMimeType(ContentService.MimeType.JSON);
-  } catch(err) {
-    return ContentService.createTextOutput(JSON.stringify({error:err.toString()})).setMimeType(ContentService.MimeType.JSON);
-  } finally {
-    try { SpreadsheetApp.flush(); } catch (flushErr) {}
-    lock.releaseLock();
-  }
-}
-
-function doGet(e) {
-  const action = e.parameter.action;
-  if (action === 'ping')
-    return ContentService.createTextOutput(JSON.stringify({status:'ok', version:'4.0'})).setMimeType(ContentService.MimeType.JSON);
-  if (action === 'getAll') {
-    const sheet = getSheet();
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 2) return ContentService.createTextOutput(JSON.stringify({bookings:[]})).setMimeType(ContentService.MimeType.JSON);
-    const data = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
-    const bookings = data.filter(row => row[0]).map(row => {
-      let dispatchLog = {};
-      try { if (row[33]) dispatchLog = JSON.parse(String(row[33])); } catch(e) {}
-      return {
-        id: String(row[0]),
-        studentName: String(row[1]||''),
-        age: String(row[2]||''),
-        gender: String(row[3]||''),
-        homeCity: String(row[4]||''),
-        parentName: String(row[5]||''),
-        phone: String(row[6]||''),
-        email: String(row[7]||''),
-        programmeType: String(row[8]||''),
-        inclusions: row[9] ? String(row[9]).split(', ') : [],
-        arrivalDate: formatDate(row[10]),
-        arrivalTime: formatTime(row[11]),
-        trainingStartDate: formatDate(row[12]),
-        trainingEndDate: formatDate(row[13]),
-        trainingPeriod: (row[12]&&row[13]) ? formatDate(row[12])+' to '+formatDate(row[13]) : (row[12]?String(row[12]):''),
-        departureDate: formatDate(row[14]),
-        invoiceAmount: String(row[15]||''),
-        miscFees: String(row[16]||''),
-        gstApplicable: String(row[31]||'').toUpperCase() === 'YES',
-        discountApplicable: String(row[32]||'').toUpperCase() === 'YES',
-        discountAmount: String(row[18]||''),
-        accountsNotes: String(row[20]||''),
-        specialNotes: String(row[21]||''),
-        status: String(row[22]||'confirmed'),
-        createdAt: String(row[23]||''),
-        isDraft: String(row[24]||'').toUpperCase() === 'YES',
-        dispatched: String(row[24]||'').toUpperCase() !== 'YES',
-        travellerName: String(row[25]||''),
-        travellerContact: String(row[26]||''),
-        flightNo: String(row[27]||''),
-        flightArrivalTime: String(row[28]||''),
-        terminal: String(row[29]||''),
-        accompanyingStaff: String(row[30]||''),
-        dispatchLog: dispatchLog
-      };
-    });
-    return ContentService.createTextOutput(JSON.stringify({bookings})).setMimeType(ContentService.MimeType.JSON);
-  }
-  return ContentService.createTextOutput(JSON.stringify({error:'unknown action'})).setMimeType(ContentService.MimeType.JSON);
-}
-
-function setupSheet() {
-  const sheet = getSheet();
-  SpreadsheetApp.getUi().alert('Sheet ready! Headers created in the Bookings tab.');
-}`;
-  navigator.clipboard.writeText(s).then(()=>alert('✓ Apps Script code copied to clipboard! (v7 — updated schema)\\n\\nNow:\\n1. Go to script.google.com\\n2. Open your Apps Script project\\n3. Select all existing code (Ctrl+A) and paste (Ctrl+V)\\n4. Click Save (Ctrl+S)\\n5. Click Deploy → Manage Deployments → Edit (pencil) → New version → Deploy\\n6. The URL stays the same — no need to update Settings\\n\\nIMPORTANT: Run setupSheet() once after deploying to add the new header columns.'));
-}
-
 // ===================== TEST EMAIL =====================
 async function sendTestEmail() {
   const key = document.getElementById('s-emailjs-key').value.trim();
@@ -3616,7 +3402,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 // ─── LEAD HANDOFF ────────────────────────────────────────────────────────────
 // Handoff no longer uses a separate form or URL-encoded fields — handOffToTeammate()
-// (above, near saveDraft) saves the real booking draft to the shared sheet and
+// (above, near saveDraft) saves the real booking draft to the shared database and
 // shares a link containing just its ID. This opens that draft once it's loaded.
 
 let _lhLinkRetries = 0;
@@ -3628,7 +3414,7 @@ function checkLeadHandoffLink() {
 
   const draft = bookings.find(b => b.id === id);
   if (!draft) {
-    // Draft may not have synced to the sheet yet — retry briefly before giving up.
+    // Draft may not have synced to the database yet — retry briefly before giving up.
     if (_lhLinkRetries < 5) {
       _lhLinkRetries++;
       setTimeout(() => { loadFromSheet(); }, 1500);
