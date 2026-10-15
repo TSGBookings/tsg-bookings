@@ -311,11 +311,8 @@ textarea { resize: vertical; min-height: 80px; }
   .section-header { padding: 0 0 12px 0; border-bottom: 0.5px solid #e2e8f0; margin-bottom: 16px; }
   .section-header h1 { font-size: 17px; font-weight: 600; color: #021b3b; margin-bottom: 2px; }
 
-  /* ── Stats grid ── */
-  .stats-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 10px; margin-bottom: 18px; }
-  .stat-card { background: #f7fafc !important; border: 0.5px solid #e2e8f0 !important; border-radius: 8px !important; box-shadow: none !important; padding: 10px 14px !important; }
-  .stat-value { font-size: 20px !important; }
-  .stat-label { font-size: 10px !important; }
+  /* ── Stats grid — dashboard numbers are not part of the PDF ── */
+  .stats-grid, #stats-grid { display: none !important; }
 
   .card { box-shadow: none !important; border: none !important; padding: 0 !important; }
   .no-print { display: none !important; }
