@@ -717,6 +717,12 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+// Some networks/proxies stall Firestore's streaming connection for 10-30s before it
+// falls back on its own; auto-detect switches to long-polling right away instead.
+db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
+// Keep a local copy in the browser so repeat loads/hard refreshes show data instantly
+// while the live listener catches up (cache reads are also free of quota).
+db.enablePersistence({ synchronizeTabs: true }).catch(function(e){ console.warn('Offline cache unavailable:', e.code); });
 
 // ===================== SAMPLE DATA =====================
 const SAMPLE_DATA = [];
@@ -1390,7 +1396,10 @@ function loadState() {
     if (savedSettings) { settings = Object.assign({}, settings, JSON.parse(savedSettings)); applySettingsToUI(); initEmailJS(); }
     else { applySettingsToUI(); initEmailJS(); }
     loadAlumniStore();
-    bookings = [];
+    // Show the last-known bookings straight away so the first screen isn't empty
+    // while the live database connection warms up; the first snapshot replaces it.
+    try { const cached = JSON.parse(localStorage.getItem('golf_bookings_v5') || '[]'); bookings = Array.isArray(cached) ? cached : []; }
+    catch(e) { bookings = []; }
     renderDashboard();
     loadFromSheet();
     loadProgrammeTypesFromSheet();
@@ -2034,9 +2043,21 @@ function renderDashboard() {
           <th style="width:14%">Parent / Contact</th>
         </tr>
       </thead>
-      <tbody>${buildMonthlyPrintRows(sorted)}</tbody>
+      <tbody>${buildMonthlyPrintRows(sortedForPrint(sorted))}</tbody>
     </table>`;
   container.innerHTML=html;
+}
+
+// The PDF reads top-down in arrival order (earliest first), unlike the on-screen
+// list which is newest-first. Same-day arrivals go by arrival time; bookings with no
+// arrival date or no clock time (blank / 'TBC') sort after the ones that have them.
+function sortedForPrint(list){
+  const timeKey=t=>/^\d{1,2}:\d{2}$/.test(t||'')?t.padStart(5,'0'):'99:99';
+  return [...list].sort((a,b)=>{
+    const da=a.arrivalDate||'9999-99-99', db_=b.arrivalDate||'9999-99-99';
+    if(da!==db_) return da.localeCompare(db_);
+    return timeKey(a.arrivalTime).localeCompare(timeKey(b.arrivalTime));
+  });
 }
 
 function toggleBookingsListExpand(){ bookingsListExpanded=!bookingsListExpanded; renderDashboard(); }
